@@ -200,10 +200,6 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-        Built with 💜 by Dharaa Singh
-      </footer>
     </main>
   );
 }

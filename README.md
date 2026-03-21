@@ -39,6 +39,3 @@ playarena/
 ├── turbo.json        # Turborepo config
 └── pnpm-workspace.yaml
 ```
-
-## Built by
-**Dharaa Singh**

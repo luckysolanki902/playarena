@@ -62,3 +62,55 @@ export function getKeyboardState(
   }
   return states;
 }
+
+// ─── Bot Solver (client-side for solo mode) ───
+
+export function getBotSuggestions(
+  guesses: Array<{ word: string; feedback: LetterFeedback[] }>,
+): { suggestions: string[]; remaining: number; reasoning: string } {
+  let candidates = WORDS.map((w) => w.toLowerCase());
+
+  for (const { word, feedback } of guesses) {
+    candidates = candidates.filter((c) => {
+      const f = getFeedback(word.toLowerCase(), c);
+      return f.every((v, i) => v === feedback[i]);
+    });
+  }
+
+  if (candidates.length === 0) {
+    return { suggestions: [], remaining: 0, reasoning: 'No matching words found.' };
+  }
+
+  // Score by unique letter frequency in remaining candidates
+  const freq = new Map<string, number>();
+  for (const w of candidates) {
+    const seen = new Set<string>();
+    for (const ch of w) {
+      if (!seen.has(ch)) {
+        freq.set(ch, (freq.get(ch) || 0) + 1);
+        seen.add(ch);
+      }
+    }
+  }
+
+  const scored = candidates.map((w) => {
+    const seen = new Set<string>();
+    let score = 0;
+    for (const ch of w) {
+      if (!seen.has(ch)) {
+        score += freq.get(ch) || 0;
+        seen.add(ch);
+      }
+    }
+    return { word: w, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const suggestions = scored.slice(0, 3).map((s) => s.word.toUpperCase());
+  const reasoning =
+    candidates.length === 1
+      ? `Only one word remaining: ${suggestions[0]}`
+      : `Narrowed to ${candidates.length} words. Best coverage: ${suggestions[0]}`;
+
+  return { suggestions, remaining: candidates.length, reasoning };
+}

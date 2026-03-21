@@ -255,7 +255,6 @@ const transitions = {
 │  Stats: "5,234 games played today"              │
 │  Features: Instant play │ Mobile │ Free forever │
 ├─────────────────────────────────────────────────┤
-│  Footer: Credits ("Built by Dharaa Singh")      │
 │  GitHub │ Twitter │ Privacy                     │
 └─────────────────────────────────────────────────┘
 ```
@@ -461,12 +460,6 @@ Mobile:
 
 ---
 
-## 12. Credits & Branding
-
-### Footer
-```
-Built with 💜 by Dharaa Singh
-```
 
 ### About Page
 - Brief description of the project
