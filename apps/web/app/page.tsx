@@ -6,8 +6,6 @@ import { validateUsername } from "@playarena/shared";
 import { useSessionStore } from "@/lib/store";
 import { sfx } from "@/lib/sounds";
 
-type GameCategory = "word" | "creative" | "typing" | "action" | "party";
-
 interface Game {
   id: string;
   name: string;
@@ -15,20 +13,9 @@ interface Game {
   color: string;
   bgGlow: string;
   letter: string;
-  ready: boolean;
-  category: GameCategory;
 }
 
-const CATEGORIES: { id: GameCategory; label: string; emoji: string }[] = [
-  { id: "word", label: "Word & Trivia", emoji: "🧠" },
-  { id: "creative", label: "Creative", emoji: "🎨" },
-  { id: "typing", label: "Typing", emoji: "⌨️" },
-  { id: "action", label: "Action", emoji: "⚡" },
-  { id: "party", label: "Party", emoji: "🎲" },
-];
-
 const GAMES: Game[] = [
-  // Word & Trivia
   {
     id: "wordle",
     name: "Wordle",
@@ -36,20 +23,7 @@ const GAMES: Game[] = [
     color: "#4ecdc4",
     bgGlow: "rgba(78, 205, 196, 0.12)",
     letter: "W",
-    ready: true,
-    category: "word",
   },
-  {
-    id: "trivia",
-    name: "Trivia",
-    tagline: "Battle wits & knowledge",
-    color: "#ff6b9d",
-    bgGlow: "rgba(255, 107, 157, 0.12)",
-    letter: "?",
-    ready: false,
-    category: "word",
-  },
-  // Creative
   {
     id: "scribble",
     name: "Scribble",
@@ -57,10 +31,7 @@ const GAMES: Game[] = [
     color: "#ffd166",
     bgGlow: "rgba(255, 209, 102, 0.12)",
     letter: "S",
-    ready: true,
-    category: "creative",
   },
-  // Typing
   {
     id: "typerush",
     name: "TypeRush",
@@ -68,10 +39,7 @@ const GAMES: Game[] = [
     color: "#a78bfa",
     bgGlow: "rgba(167, 139, 250, 0.12)",
     letter: "T",
-    ready: true,
-    category: "typing",
   },
-  // Action
   {
     id: "pulsegrid",
     name: "PulseGrid",
@@ -79,28 +47,6 @@ const GAMES: Game[] = [
     color: "#22d3ee",
     bgGlow: "rgba(34, 211, 238, 0.12)",
     letter: "P",
-    ready: true,
-    category: "action",
-  },
-  {
-    id: "neondrift",
-    name: "Neon Drift",
-    tagline: "Tron-style line duel",
-    color: "#f472b6",
-    bgGlow: "rgba(244, 114, 182, 0.12)",
-    letter: "N",
-    ready: true,
-    category: "action",
-  },
-  {
-    id: "voidfall",
-    name: "Voidfall",
-    tagline: "Dodge the shrinking zone",
-    color: "#818cf8",
-    bgGlow: "rgba(129, 140, 248, 0.12)",
-    letter: "V",
-    ready: true,
-    category: "action",
   },
   {
     id: "syncshot",
@@ -109,29 +55,6 @@ const GAMES: Game[] = [
     color: "#f59e0b",
     bgGlow: "rgba(245, 158, 11, 0.12)",
     letter: "⊕",
-    ready: true,
-    category: "action",
-  },
-  // Party
-  {
-    id: "glitcharena",
-    name: "Glitch Arena",
-    tagline: "Chaos button madness",
-    color: "#fb923c",
-    bgGlow: "rgba(251, 146, 60, 0.12)",
-    letter: "G",
-    ready: true,
-    category: "party",
-  },
-  {
-    id: "orbitbrawl",
-    name: "Orbit Brawl",
-    tagline: "Magnetic push mayhem",
-    color: "#e879f9",
-    bgGlow: "rgba(232, 121, 249, 0.12)",
-    letter: "O",
-    ready: true,
-    category: "party",
   },
 ];
 
@@ -333,83 +256,55 @@ export default function Home() {
           )}
         </motion.div>
 
-        {/* Game Cards by Category */}
-        <div className="mt-14 max-w-3xl w-full px-2 space-y-8">
-          {CATEGORIES.map((category) => {
-            const categoryGames = GAMES.filter((g) => g.category === category.id);
-            if (categoryGames.length === 0) return null;
-            return (
+        {/* Game Cards Grid */}
+        <div className="mt-14 max-w-3xl w-full px-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {GAMES.map((game, i) => (
               <motion.div
-                key={category.id}
-                initial={{ opacity: 0, y: 20 }}
+                key={game.id}
+                initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
+                transition={{ delay: 0.4 + i * 0.06, type: "spring", stiffness: 200 }}
+                onClick={() => {
+                  if (session) {
+                    sfx.click();
+                    window.location.href = `/games/${game.id}`;
+                  }
+                }}
+                onMouseEnter={() => session && sfx.hover()}
+                className={`game-card relative rounded-2xl p-4 sm:p-5 flex flex-col items-center text-center cursor-pointer overflow-hidden ${
+                  !session ? "opacity-50 cursor-default !transform-none" : ""
+                }`}
+                style={{
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border-default)",
+                }}
               >
-                <h2
-                  className="text-sm font-bold mb-3 flex items-center gap-2"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  <span>{category.emoji}</span>
-                  {category.label}
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {categoryGames.map((game, i) => (
-                    <motion.div
-                      key={game.id}
-                      initial={{ opacity: 0, y: 24 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 + i * 0.08, type: "spring", stiffness: 200 }}
-                      onClick={() => {
-                        if (game.ready && session) {
-                          sfx.click();
-                          window.location.href = `/games/${game.id}`;
-                        }
-                      }}
-                      onMouseEnter={() => game.ready && session && sfx.hover()}
-                      className={`game-card relative rounded-2xl p-4 sm:p-5 flex flex-col items-center text-center cursor-pointer overflow-hidden ${
-                        !game.ready || !session ? "opacity-50 cursor-default !transform-none" : ""
-                      }`}
-                      style={{
-                        background: "var(--bg-card)",
-                        border: "1px solid var(--border-default)",
-                      }}
-                    >
-                      {/* Glow */}
-                      <div
-                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ background: `radial-gradient(circle at center, ${game.bgGlow}, transparent 70%)` }}
-                      />
+                {/* Glow */}
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: `radial-gradient(circle at center, ${game.bgGlow}, transparent 70%)` }}
+                />
 
-                      <div
-                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-black mb-3 relative z-10"
-                        style={{
-                          background: game.bgGlow,
-                          color: game.color,
-                          boxShadow: `0 4px 20px ${game.bgGlow}`,
-                        }}
-                      >
-                        {game.letter}
-                      </div>
-                      <h3 className="text-sm sm:text-base font-bold relative z-10" style={{ color: "var(--text-primary)" }}>
-                        {game.name}
-                      </h3>
-                      <p className="text-[11px] sm:text-xs mt-0.5 relative z-10" style={{ color: "var(--text-muted)" }}>
-                        {game.tagline}
-                      </p>
-                      {!game.ready && (
-                        <span
-                          className="text-[10px] px-2 py-0.5 rounded-full font-bold mt-2 relative z-10"
-                          style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                        >
-                          Soon
-                        </span>
-                      )}
-                    </motion.div>
-                  ))}
+                <div
+                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-black mb-3 relative z-10"
+                  style={{
+                    background: game.bgGlow,
+                    color: game.color,
+                    boxShadow: `0 4px 20px ${game.bgGlow}`,
+                  }}
+                >
+                  {game.letter}
                 </div>
+                <h3 className="text-sm sm:text-base font-bold relative z-10" style={{ color: "var(--text-primary)" }}>
+                  {game.name}
+                </h3>
+                <p className="text-[11px] sm:text-xs mt-0.5 relative z-10" style={{ color: "var(--text-muted)" }}>
+                  {game.tagline}
+                </p>
               </motion.div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </section>
 

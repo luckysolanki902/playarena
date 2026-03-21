@@ -342,7 +342,7 @@ export default function ScribbleRoom() {
                         {p.username[0].toUpperCase()}
                       </div>
                       <span style={{ color: "var(--text-primary)" }}>{p.username}</span>
-                      {p.isHost && <span className="text-[10px] px-1 rounded-full" style={{ background: "rgba(255,209,102,0.15)", color: "var(--accent-warm)" }}>Host</span>}
+                      {p.isHost && visibility === "private" && <span className="text-[10px] px-1 rounded-full" style={{ background: "rgba(255,209,102,0.15)", color: "var(--accent-warm)" }}>Host</span>}
                     </motion.div>
                   ))}
                 </div>

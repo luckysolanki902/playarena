@@ -38,6 +38,7 @@ export interface SyncShotSettings {
   totalRounds: number;
   hitPoints: number;
   speedBonusMax: number; // bonus points for fast hits
+  accuracyBonusMax: number; // bonus points for center hits
   missPenalty: number;
 }
 
@@ -52,8 +53,9 @@ export const DEFAULT_SYNCSHOT_SETTINGS: SyncShotSettings = {
   shotCooldownTicks: 10, // 500ms at 50ms tick
   tickRate: 50,
   totalRounds: 3,
-  hitPoints: 100,
+  hitPoints: 50, // base points for any hit
   speedBonusMax: 50, // bonus for hitting within 500ms
+  accuracyBonusMax: 100, // bonus for hitting center (0 at edge)
   missPenalty: 25,
 };
 
@@ -130,6 +132,7 @@ export interface SyncShotTargetHitEvent {
   hitTime: number;
   points: number;
   speedBonus: number;
+  accuracyBonus: number;
 }
 
 export interface SyncShotMissEvent {

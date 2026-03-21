@@ -44,7 +44,7 @@ export default function ScribbleLobby() {
         const listData = await listRes.json();
         type R = { id: string; status: string; players: number; maxPlayers: number };
         const avail = (listData.rooms as R[])
-          .filter((r) => r.status === "waiting" && r.players >= 1 && r.players < Math.min(r.maxPlayers, 7))
+          .filter((r) => r.status === "waiting" && r.players < Math.min(r.maxPlayers, 7))
           .sort((a, b) => b.players - a.players);
         if (avail.length > 0) { sfx.go(); router.push(`/games/scribble/${avail[0].id}`); return; }
       }

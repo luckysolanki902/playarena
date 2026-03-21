@@ -64,7 +64,7 @@ export default function TypeRushLobby() {
         const listData = await listRes.json();
         type RoomItem = { id: string; status: string; players: number; maxPlayers: number };
         const available = (listData.rooms as RoomItem[])
-          .filter((r) => r.status === "waiting" && r.players >= 1 && r.players < Math.min(r.maxPlayers, 6))
+          .filter((r) => r.status === "waiting" && r.players < Math.min(r.maxPlayers, 6))
           .sort((a, b) => b.players - a.players);
         if (available.length > 0) {
           sfx.go();

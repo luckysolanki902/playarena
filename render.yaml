@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: playarena-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: pnpm install && pnpm build --filter @playarena/server
+    startCommand: node apps/server/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTO_START_DELAY
+        value: 15

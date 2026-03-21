@@ -56,7 +56,8 @@ export async function roomRoutes(app: FastifyInstance) {
 
     const { game, name, visibility, maxPlayers } = request.body ?? {};
 
-    if (!game || !['wordle', 'scribble'].includes(game)) {
+    const VALID_GAMES = ['wordle', 'scribble', 'typerush', 'pulsegrid', 'neondrift', 'voidfall', 'syncshot', 'glitcharena', 'orbitbrawl'];
+    if (!game || !VALID_GAMES.includes(game)) {
       return reply.status(400).send({ error: 'INVALID_INPUT', message: 'Invalid game type' });
     }
 

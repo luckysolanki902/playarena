@@ -150,7 +150,7 @@ export class SyncShotEngine {
     roomId: string,
     playerId: string,
     clickPosition: SyncShotPosition
-  ): { hit: boolean; target?: SyncShotTarget; points?: number; speedBonus?: number } | null {
+  ): { hit: boolean; target?: SyncShotTarget; points?: number; speedBonus?: number; accuracyBonus?: number } | null {
     const round = this.rounds.get(roomId);
     const game = this.games.get(roomId);
     if (!round || !game || !round.isActive) return null;
@@ -181,7 +181,12 @@ export class SyncShotEngine {
       
       // Speed bonus: faster hits get more bonus (max bonus at 0ms, 0 bonus at 1000ms)
       const speedBonus = Math.max(0, Math.floor(game.settings.speedBonusMax * (1 - reactionTime / 1000)));
-      const points = game.settings.hitPoints + speedBonus;
+      
+      // Accuracy bonus: closer to center = more points (100% at center, 0% at edge)
+      const accuracyRatio = 1 - (distance / target.radius);
+      const accuracyBonus = Math.floor(game.settings.accuracyBonusMax * accuracyRatio);
+      
+      const points = game.settings.hitPoints + speedBonus + accuracyBonus;
 
       target.hitBy = playerId;
       target.hitTime = hitTime;
@@ -191,7 +196,7 @@ export class SyncShotEngine {
       player.hits++;
       player.oddsScore += points;
 
-      return { hit: true, target, points: game.settings.hitPoints, speedBonus };
+      return { hit: true, target, points: game.settings.hitPoints, speedBonus, accuracyBonus };
     } else {
       // Miss
       player.misses++;

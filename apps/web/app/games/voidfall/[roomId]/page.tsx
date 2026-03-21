@@ -423,7 +423,7 @@ export default function VoidfallRoomPage() {
                   <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black"
                     style={{ background: GAME_COLOR, color: "var(--bg-primary)" }}>{p.username[0].toUpperCase()}</div>
                   {p.username}
-                  {p.isHost && (
+                  {p.isHost && visibility === "private" && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
                       style={{ background: "rgba(255,209,102,0.15)", color: "var(--accent-warm)" }}>Host</span>
                   )}

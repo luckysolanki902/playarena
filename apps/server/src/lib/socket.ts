@@ -8,28 +8,21 @@ import { WordleEngine } from '../engine/wordle';
 import { ScribbleEngine } from '../engine/scribble';
 import { TypeRushEngine } from '../engine/typerush';
 import { PulseGridEngine } from '../engine/pulsegrid';
-import { NeonDriftEngine } from '../engine/neondrift';
-import { VoidfallEngine } from '../engine/voidfall';
 import { SyncShotEngine } from '../engine/syncshot';
-import { GlitchArenaEngine } from '../engine/glitcharena';
-import { OrbitBrawlEngine } from '../engine/orbitbrawl';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
 const typeRushEngine = new TypeRushEngine();
 const pulseGridEngine = new PulseGridEngine();
-const neonDriftEngine = new NeonDriftEngine();
-const voidfallEngine = new VoidfallEngine();
 const syncShotEngine = new SyncShotEngine();
-const glitchArenaEngine = new GlitchArenaEngine();
-const orbitBrawlEngine = new OrbitBrawlEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // Auto-start timers for public/quick-match rooms
 const autoStartTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; countdown: ReturnType<typeof setInterval> }>();
 
-const AUTO_START_DELAY = 15; // seconds
+// Auto-start delay in seconds (0 for instant start in dev)
+const AUTO_START_DELAY = parseInt(process.env.AUTO_START_DELAY || '15', 10);
 
 function clearRoomTimer(roomId: string) {
   const t = roomTimers.get(roomId);
@@ -269,190 +262,6 @@ function handlePulseGridRoundEnd(io: SocketIOServer, roomId: string, roomStore: 
   }
 }
 
-// ─── NeonDrift helpers ───
-
-function startNeonDriftRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  const room = roomStore.get(roomId);
-  if (!room) return;
-
-  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
-  const roundData = neonDriftEngine.startRound(roomId, players);
-  
-  if (!roundData) {
-    // Game over
-    const finalRankings = neonDriftEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('neondrift:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    neonDriftEngine.removeGame(roomId);
-    return;
-  }
-
-  io.to(roomId).emit('neondrift:round-start', {
-    round: roundData.round,
-    totalRounds: roundData.totalRounds,
-    gridWidth: roundData.gridWidth,
-    gridHeight: roundData.gridHeight,
-    players: roundData.players,
-    tickRate: roundData.tickRate,
-    countdownSeconds: roundData.countdownSeconds,
-  });
-
-  // Round countdown before starting
-  let countdown = 3;
-  const countdownInterval = setInterval(() => {
-    countdown--;
-    if (countdown > 0) {
-      io.to(roomId).emit('neondrift:countdown', { seconds: countdown });
-    } else {
-      clearInterval(countdownInterval);
-      neonDriftEngine.markRoundActive(roomId);
-      io.to(roomId).emit('neondrift:go', {});
-      // Start game tick
-      neonDriftEngine.startTick(roomId, () => {
-        const tickResult = neonDriftEngine.tick(roomId);
-        if (!tickResult) return;
-
-        io.to(roomId).emit('neondrift:tick', {
-          players: tickResult.players,
-          tick: tickResult.tick,
-        });
-
-        // Notify crashes
-        for (const crash of tickResult.crashed) {
-          const game = neonDriftEngine.getGame(roomId);
-          const player = game?.currentRound?.players[crash.sessionId];
-          io.to(roomId).emit('neondrift:player-crashed', {
-            sessionId: crash.sessionId,
-            username: player?.username ?? 'Unknown',
-            position: crash.position,
-          });
-        }
-
-        if (tickResult.roundOver) {
-          handleNeonDriftRoundEnd(io, roomId, roomStore);
-        }
-      });
-    }
-  }, 1000);
-}
-
-function handleNeonDriftRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  neonDriftEngine.stopTick(roomId);
-  const result = neonDriftEngine.endRound(roomId);
-  if (!result) return;
-
-  io.to(roomId).emit('neondrift:round-end', {
-    rankings: result.rankings,
-    nextRoundIn: result.isGameOver ? 0 : 5,
-  });
-
-  if (result.isGameOver) {
-    const finalRankings = neonDriftEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('neondrift:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    neonDriftEngine.removeGame(roomId);
-  } else {
-    setTimeout(() => startNeonDriftRound(io, roomId, roomStore), 5000);
-  }
-}
-
-// ─── Voidfall helpers ───
-
-function startVoidfallRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  const room = roomStore.get(roomId);
-  if (!room) return;
-
-  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
-  const roundData = voidfallEngine.startRound(roomId, players);
-  
-  if (!roundData) {
-    // Game over
-    const finalRankings = voidfallEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('voidfall:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    voidfallEngine.removeGame(roomId);
-    return;
-  }
-
-  io.to(roomId).emit('voidfall:round-start', {
-    round: roundData.round,
-    totalRounds: roundData.totalRounds,
-    arenaWidth: roundData.arenaWidth,
-    arenaHeight: roundData.arenaHeight,
-    players: roundData.players,
-    safeZone: roundData.safeZone,
-    tickRate: roundData.tickRate,
-    countdownSeconds: roundData.countdownSeconds,
-  });
-
-  // Round countdown before starting
-  let countdown = 3;
-  const countdownInterval = setInterval(() => {
-    countdown--;
-    if (countdown > 0) {
-      io.to(roomId).emit('voidfall:countdown', { seconds: countdown });
-    } else {
-      clearInterval(countdownInterval);
-      voidfallEngine.markRoundActive(roomId);
-      io.to(roomId).emit('voidfall:go', {});
-      // Start game tick
-      voidfallEngine.startTick(roomId, () => {
-        const tickResult = voidfallEngine.tick(roomId);
-        if (!tickResult) return;
-
-        io.to(roomId).emit('voidfall:tick', {
-          players: tickResult.players,
-          safeZone: tickResult.safeZone,
-          tick: tickResult.tick,
-        });
-
-        // Notify zone shrinking
-        if (tickResult.startShrinking) {
-          io.to(roomId).emit('voidfall:zone-shrinking', {
-            newTargetRadius: tickResult.safeZone.targetRadius,
-            duration: 15,
-          });
-        }
-
-        // Notify eliminations
-        for (const elim of tickResult.eliminated) {
-          const game = voidfallEngine.getGame(roomId);
-          const player = game?.currentRound?.players[elim.sessionId];
-          io.to(roomId).emit('voidfall:player-eliminated', {
-            sessionId: elim.sessionId,
-            username: player?.username ?? 'Unknown',
-            position: elim.position,
-          });
-        }
-
-        if (tickResult.roundOver) {
-          handleVoidfallRoundEnd(io, roomId, roomStore);
-        }
-      });
-    }
-  }, 1000);
-}
-
-function handleVoidfallRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  voidfallEngine.stopTick(roomId);
-  const result = voidfallEngine.endRound(roomId);
-  if (!result) return;
-
-  io.to(roomId).emit('voidfall:round-end', {
-    rankings: result.rankings,
-    nextRoundIn: result.isGameOver ? 0 : 5,
-  });
-
-  if (result.isGameOver) {
-    const finalRankings = voidfallEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('voidfall:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    voidfallEngine.removeGame(roomId);
-  } else {
-    setTimeout(() => startVoidfallRound(io, roomId, roomStore), 5000);
-  }
-}
-
 // ─── SyncShot helpers ───
 
 function startSyncShotRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
@@ -537,183 +346,6 @@ function handleSyncShotRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
-// ─── GlitchArena helpers ───
-
-function startGlitchArenaRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  const room = roomStore.get(roomId);
-  if (!room) return;
-
-  const roundData = glitchArenaEngine.startRound(roomId);
-  
-  if (!roundData) {
-    // Game over
-    const finalRankings = glitchArenaEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('glitcharena:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    glitchArenaEngine.cleanup(roomId);
-    return;
-  }
-
-  const game = glitchArenaEngine.getGameState(roomId);
-  if (!game) return;
-
-  io.to(roomId).emit('glitcharena:round-start', {
-    roundNumber: game.currentRound,
-    players: roundData.players,
-    settings: game.settings,
-    roundDuration: game.settings.roundDuration,
-  });
-
-  // Countdown before starting
-  let countdown = 3;
-  const countdownInterval = setInterval(() => {
-    countdown--;
-    io.to(roomId).emit('game:countdown', { count: countdown });
-    if (countdown <= 0) {
-      clearInterval(countdownInterval);
-      glitchArenaEngine.markRoundActive(roomId);
-      
-      // Start tick loop
-      glitchArenaEngine.startTick(roomId, (result) => {
-        if (!result) return;
-
-        io.to(roomId).emit('glitcharena:tick', {
-          players: result.state.players,
-          buttons: result.state.buttons,
-          activeEffects: result.state.activeEffects,
-          timeRemaining: result.timeRemaining,
-        });
-
-        // Notify expired buttons
-        for (const buttonId of result.expiredButtons) {
-          io.to(roomId).emit('glitcharena:button-expired', { buttonId });
-        }
-
-        // Notify glitch effects
-        if (result.randomGlitch) {
-          io.to(roomId).emit('glitcharena:glitch', { effect: result.randomGlitch });
-        }
-
-        if (result.roundOver) {
-          handleGlitchArenaRoundEnd(io, roomId, roomStore);
-        }
-      });
-
-      // Start spawning buttons
-      glitchArenaEngine.startSpawning(roomId, (button) => {
-        io.to(roomId).emit('glitcharena:button-spawn', { button });
-      });
-    }
-  }, 1000);
-}
-
-function handleGlitchArenaRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  glitchArenaEngine.stopTick(roomId);
-  glitchArenaEngine.stopSpawning(roomId);
-  const result = glitchArenaEngine.endRound(roomId);
-  if (!result) return;
-
-  const isGameOver = glitchArenaEngine.isGameOver(roomId);
-  const finalResults = isGameOver ? glitchArenaEngine.getFinalRankings(roomId) : undefined;
-
-  io.to(roomId).emit('glitcharena:round-end', {
-    roundNumber: glitchArenaEngine.getGameState(roomId)?.currentRound ?? 0,
-    results: result,
-    isGameOver,
-    finalResults,
-  });
-
-  if (isGameOver) {
-    roomStore.setStatus(roomId, 'finished');
-    glitchArenaEngine.cleanup(roomId);
-  } else {
-    setTimeout(() => startGlitchArenaRound(io, roomId, roomStore), 5000);
-  }
-}
-
-// ─── OrbitBrawl helpers ───
-
-function startOrbitBrawlRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  const room = roomStore.get(roomId);
-  if (!room) return;
-
-  const roundData = orbitBrawlEngine.startRound(roomId);
-  
-  if (!roundData) {
-    // Game over
-    const finalRankings = orbitBrawlEngine.getFinalRankings(roomId);
-    io.to(roomId).emit('orbitbrawl:game-end', { finalRankings });
-    roomStore.setStatus(roomId, 'finished');
-    orbitBrawlEngine.cleanup(roomId);
-    return;
-  }
-
-  const game = orbitBrawlEngine.getGameState(roomId);
-  if (!game) return;
-
-  io.to(roomId).emit('orbitbrawl:round-start', {
-    roundNumber: game.currentRound,
-    players: roundData.players,
-    settings: game.settings,
-  });
-
-  // Countdown before starting
-  let countdown = 3;
-  const countdownInterval = setInterval(() => {
-    countdown--;
-    io.to(roomId).emit('game:countdown', { count: countdown });
-    if (countdown <= 0) {
-      clearInterval(countdownInterval);
-      orbitBrawlEngine.markRoundActive(roomId);
-      
-      // Start tick loop
-      orbitBrawlEngine.startTick(roomId, (result) => {
-        if (!result) return;
-
-        io.to(roomId).emit('orbitbrawl:tick', {
-          players: result.state.players,
-        });
-
-        // Notify eliminations
-        for (const elim of result.eliminated) {
-          io.to(roomId).emit('orbitbrawl:player-eliminated', {
-            playerId: elim.playerId,
-            eliminatedBy: elim.eliminatedBy,
-            position: elim.position,
-          });
-        }
-
-        if (result.roundOver) {
-          handleOrbitBrawlRoundEnd(io, roomId, roomStore);
-        }
-      });
-    }
-  }, 1000);
-}
-
-function handleOrbitBrawlRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
-  orbitBrawlEngine.stopTick(roomId);
-  const result = orbitBrawlEngine.endRound(roomId);
-  if (!result) return;
-
-  const isGameOver = orbitBrawlEngine.isGameOver(roomId);
-  const finalResults = isGameOver ? orbitBrawlEngine.getFinalRankings(roomId) : undefined;
-
-  io.to(roomId).emit('orbitbrawl:round-end', {
-    roundNumber: orbitBrawlEngine.getGameState(roomId)?.currentRound ?? 0,
-    rankings: result,
-    isGameOver,
-    finalResults,
-  });
-
-  if (isGameOver) {
-    roomStore.setStatus(roomId, 'finished');
-    orbitBrawlEngine.cleanup(roomId);
-  } else {
-    setTimeout(() => startOrbitBrawlRound(io, roomId, roomStore), 5000);
-  }
-}
-
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -750,35 +382,11 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
       roomStore.setStatus(roomId, 'in_progress');
       startPulseGridRound(io, roomId, roomStore);
     }, 3000);
-  } else if (room.game === 'neondrift') {
-    neonDriftEngine.createGame(roomId, players);
-    setTimeout(() => {
-      roomStore.setStatus(roomId, 'in_progress');
-      startNeonDriftRound(io, roomId, roomStore);
-    }, 3000);
-  } else if (room.game === 'voidfall') {
-    voidfallEngine.createGame(roomId, players);
-    setTimeout(() => {
-      roomStore.setStatus(roomId, 'in_progress');
-      startVoidfallRound(io, roomId, roomStore);
-    }, 3000);
   } else if (room.game === 'syncshot') {
     syncShotEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startSyncShotRound(io, roomId, roomStore);
-    }, 3000);
-  } else if (room.game === 'glitcharena') {
-    glitchArenaEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
-    setTimeout(() => {
-      roomStore.setStatus(roomId, 'in_progress');
-      startGlitchArenaRound(io, roomId, roomStore);
-    }, 3000);
-  } else if (room.game === 'orbitbrawl') {
-    orbitBrawlEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
-    setTimeout(() => {
-      roomStore.setStatus(roomId, 'in_progress');
-      startOrbitBrawlRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -792,6 +400,12 @@ function maybeStartAutoStart(io: SocketIOServer, roomId: string, roomStore: Room
   if (room.players.length < 2) return;
   // Already running?
   if (autoStartTimers.has(roomId)) return;
+
+  // If delay is 0, start immediately (dev mode)
+  if (AUTO_START_DELAY <= 0) {
+    doStartGame(io, roomId, roomStore);
+    return;
+  }
 
   let secondsLeft = AUTO_START_DELAY;
   io.to(roomId).emit('lobby:auto-start', { secondsLeft });
@@ -1164,22 +778,6 @@ export function setupSocketIO(
       }
     });
 
-    // ─── NeonDrift Game Events ───
-
-    socket.on('neondrift:turn', (data: { roomId: string; direction: Direction }) => {
-      neonDriftEngine.turn(data.roomId, sessionId, data.direction);
-    });
-
-    // ─── Voidfall Game Events ───
-
-    socket.on('voidfall:move', (data: { roomId: string; direction: { x: number; y: number } }) => {
-      voidfallEngine.setPlayerDirection(data.roomId, sessionId, data.direction);
-    });
-
-    socket.on('voidfall:stop', (data: { roomId: string }) => {
-      voidfallEngine.stopPlayer(data.roomId, sessionId);
-    });
-
     // ─── SyncShot Game Events ───
 
     socket.on('syncshot:move', (data: { roomId: string; position: { x: number; y: number } }) => {
@@ -1197,59 +795,10 @@ export function setupSocketIO(
           hitTime: result.target.hitTime,
           points: result.points ?? 0,
           speedBonus: result.speedBonus ?? 0,
+          accuracyBonus: result.accuracyBonus ?? 0,
         });
       } else {
         socket.emit('syncshot:miss', { playerId: sessionId, position: data.position });
-      }
-    });
-
-    // ─── GlitchArena Game Events ───
-
-    socket.on('glitcharena:click', (data: { roomId: string; buttonId: string }) => {
-      const result = glitchArenaEngine.clickButton(data.roomId, sessionId, data.buttonId);
-      if (!result) return;
-
-      if (result.hit && result.button) {
-        io.to(data.roomId).emit('glitcharena:button-hit', {
-          buttonId: result.button.id,
-          hitBy: sessionId,
-          points: result.points ?? 0,
-          comboBonus: result.comboBonus ?? 0,
-          newCombo: result.newCombo ?? 0,
-        });
-
-        // Broadcast glitch effect if triggered
-        if (result.glitchEffect) {
-          io.to(data.roomId).emit('glitcharena:glitch', { effect: result.glitchEffect });
-        }
-      }
-    });
-
-    socket.on('glitcharena:move', (data: { roomId: string; position: { x: number; y: number } }) => {
-      glitchArenaEngine.updateCursorPosition(data.roomId, sessionId, data.position);
-    });
-
-    // ─── OrbitBrawl Game Events ───
-
-    socket.on('orbitbrawl:start-charge', (data: { roomId: string; chargeType: 'push' | 'pull' }) => {
-      orbitBrawlEngine.startCharge(data.roomId, sessionId, data.chargeType);
-    });
-
-    socket.on('orbitbrawl:release-charge', (data: { roomId: string }) => {
-      // Get chargeType before it's reset
-      const round = orbitBrawlEngine.getRoundState(data.roomId);
-      const player = round?.players[sessionId];
-      const chargeType = player?.chargeType;
-      
-      const result = orbitBrawlEngine.releaseCharge(data.roomId, sessionId);
-      if (result && player && chargeType) {
-        io.to(data.roomId).emit('orbitbrawl:force-used', {
-          playerId: sessionId,
-          position: player.position,
-          chargeType,
-          power: result.power,
-          radius: result.radius,
-        });
       }
     });
 

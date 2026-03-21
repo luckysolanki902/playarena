@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import { connectSocket, disconnectSocket } from '@/lib/socket';
+import { useSessionStore } from '@/lib/store';
 import {
   OrbitPlayer,
   OrbitPosition,
@@ -17,16 +19,14 @@ import {
 } from '@playarena/shared';
 
 interface Player {
-  oddsId?: string;
-  oddsName?: string;
-  sessionId?: string;
-  username?: string;
+  sessionId: string;
+  username: string;
   isHost?: boolean;
 }
 
 interface RoomInfo {
   id: string;
-  hostId: string;
+  hostSessionId: string;
   visibility: 'public' | 'private';
   players: Player[];
 }
@@ -48,6 +48,7 @@ export default function OrbitBrawlRoom() {
   const params = useParams();
   const router = useRouter();
   const roomId = params.roomId as string;
+  const session = useSessionStore((s) => s.session);
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [room, setRoom] = useState<RoomInfo | null>(null);
@@ -76,30 +77,34 @@ export default function OrbitBrawlRoom() {
   }, [settings]);
 
   useEffect(() => {
-    const newSocket = io(process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001');
+    if (!session) {
+      router.push('/games/orbitbrawl');
+      return;
+    }
+    const newSocket = connectSocket();
     setSocket(newSocket);
 
-    newSocket.emit('room:join', { roomId });
+    newSocket.emit('lobby:join-room', { roomId });
 
-    newSocket.on('room:joined', (roomState: RoomInfo) => {
+    newSocket.on('lobby:room-joined', ({ room: roomState }: { room: RoomInfo }) => {
       setRoom(roomState);
       const names: Record<string, string> = {};
       roomState.players.forEach((p: Player) => {
-        names[p.oddsId || p.sessionId || ''] = p.oddsName || p.username || '';
+        names[p.sessionId || ''] = p.username || '';
       });
       setPlayerNames(names);
     });
 
-    newSocket.on('room:updated', (roomState: RoomInfo) => {
+    newSocket.on('lobby:room-updated', ({ room: roomState }: { room: RoomInfo }) => {
       setRoom(roomState);
       const names: Record<string, string> = {};
       roomState.players.forEach((p: Player) => {
-        names[p.oddsId || p.sessionId || ''] = p.oddsName || p.username || '';
+        names[p.sessionId || ''] = p.username || '';
       });
       setPlayerNames(names);
     });
 
-    newSocket.on('room:auto-start-timer', ({ timeLeft }: { timeLeft: number }) => {
+    newSocket.on('lobby:auto-start-timer', ({ timeLeft }: { timeLeft: number }) => {
       setAutoStartTimer(timeLeft);
     });
 
@@ -325,14 +330,14 @@ export default function OrbitBrawlRoom() {
   }, []);
 
   const handleStartGame = () => {
-    if (socket && room?.hostId === socket.id) {
-      socket.emit('game:start', { roomId });
+    if (socket && room?.hostSessionId === session?.sessionId) {
+      socket.emit('lobby:start-game', { roomId });
     }
   };
 
   const handlePlayAgain = () => {
     if (socket) {
-      socket.emit('room:play-again', { roomId });
+      socket.emit('lobby:play-again', { roomId });
       setPhase('lobby');
       setRoundResults(null);
     }
@@ -342,8 +347,8 @@ export default function OrbitBrawlRoom() {
     router.push('/games/orbitbrawl');
   };
 
-  const myPlayer = socket?.id ? players[socket.id] : null;
-  const isHost = socket?.id && room?.hostId === socket.id;
+  const myPlayer = session?.sessionId ? players[session.sessionId] : null;
+  const isHost = session?.sessionId && room?.hostSessionId === session.sessionId;
   const alivePlayers = Object.values(players).filter((p) => p.alive).length;
 
   return (
@@ -390,7 +395,7 @@ export default function OrbitBrawlRoom() {
             <div className="grid grid-cols-2 gap-4 mb-8 max-w-md mx-auto">
               {room.players.map((player: Player, i: number) => (
                 <motion.div
-                  key={player.oddsId || player.sessionId}
+                  key={player.sessionId}
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="p-4 bg-gray-900 rounded-lg border border-gray-700"
@@ -399,10 +404,10 @@ export default function OrbitBrawlRoom() {
                     className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center text-black font-bold"
                     style={{ backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'][i % 4] }}
                   >
-                    {(player.oddsName || player.username || 'P')[0]}
+                    {(player.username || 'P')[0]}
                   </div>
-                  <p className="font-semibold truncate">{player.oddsName || player.username}</p>
-                  {(player.oddsId || player.sessionId) === room.hostId && (
+                  <p className="font-semibold truncate">{player.username}</p>
+                  {room.visibility === 'private' && player.sessionId === room.hostSessionId && (
                     <span className="text-xs text-fuchsia-500">Host</span>
                   )}
                 </motion.div>

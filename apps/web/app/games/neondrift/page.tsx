@@ -7,56 +7,59 @@ import Link from "next/link";
 import { useSessionStore } from "@/lib/store";
 import { sfx } from "@/lib/sounds";
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const GAME_COLOR = "#f472b6";
 
 export default function NeonDriftLobbyPage() {
   const router = useRouter();
-  const session = useSessionStore((s) => s.session);
+  const { session, token } = useSessionStore();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleQuickMatch() {
-    if (!session) return;
+    if (!session || !token) return;
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/rooms/quick-match`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("arena_token")}` },
-        body: JSON.stringify({ game: "neondrift" }),
-      });
-      if (!res.ok) throw new Error("Failed to find match");
-      const { room } = await res.json();
-      sfx.click();
-      router.push(`/games/neondrift/${room.id}`);
-    } catch (e) { setError("Could not find a match"); }
+      const listRes = await fetch(`${API}/rooms?game=neondrift`, { headers: { Authorization: `Bearer ${token}` } });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        type Room = { id: string; status: string; players: number; maxPlayers: number };
+        const available = (listData.rooms as Room[]).filter((r) => r.status === "waiting" && r.players < Math.min(r.maxPlayers, 5)).sort((a, b) => b.players - a.players);
+        if (available.length > 0) { sfx.go(); router.push(`/games/neondrift/${available[0].id}`); return; }
+      }
+      const res = await fetch(`${API}/rooms`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ game: "neondrift", visibility: "public", maxPlayers: 6 }) });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      sfx.go(); router.push(`/games/neondrift/${data.id}`);
+    } catch { setError("Could not find a match"); }
     setLoading(false);
   }
 
   async function handleCreateRoom() {
-    if (!session) return;
+    if (!session || !token) return;
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/rooms`, {
+      const res = await fetch(`${API}/rooms`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("arena_token")}` },
-        body: JSON.stringify({ game: "neondrift", visibility: "private" }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ game: "neondrift", visibility: "private", maxPlayers: 6 }),
       });
       if (!res.ok) throw new Error("Failed to create room");
-      const { room } = await res.json();
+      const data = await res.json();
       sfx.click();
-      router.push(`/games/neondrift/${room.id}`);
-    } catch (e) { setError("Could not create room"); }
+      router.push(`/games/neondrift/${data.id}`);
+    } catch { setError("Could not create room"); }
     setLoading(false);
   }
 
   async function handleJoinByCode() {
-    if (!session || !code.trim()) return;
+    if (!session || !token || !code.trim()) return;
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/rooms/join`, {
+      const res = await fetch(`${API}/rooms/join`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("arena_token")}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ code: code.trim().toUpperCase() }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Room not found"); }
