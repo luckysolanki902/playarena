@@ -68,7 +68,7 @@ const GAMES: Game[] = [
     color: "#a78bfa",
     bgGlow: "rgba(167, 139, 250, 0.12)",
     letter: "T",
-    ready: false,
+    ready: true,
     category: "typing",
   },
   // Action

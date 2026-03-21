@@ -6,9 +6,11 @@ import { sanitizeText, validateChatMessage } from '@playarena/shared';
 import type { DrawPoint } from '@playarena/shared';
 import { WordleEngine } from '../engine/wordle';
 import { ScribbleEngine } from '../engine/scribble';
+import { TypeRushEngine } from '../engine/typerush';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
+const typeRushEngine = new TypeRushEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -156,6 +158,51 @@ function handleScribbleRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
+// ─── TypeRush helpers ───
+
+function startTypeRushRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
+  const roundData = typeRushEngine.startRound(roomId, players);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = typeRushEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('typerush:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    typeRushEngine.removeGame(roomId);
+    return;
+  }
+
+  io.to(roomId).emit('typerush:round-start', {
+    round: roundData.round,
+    totalRounds: roundData.totalRounds,
+    text: roundData.text,
+    words: roundData.words,
+  });
+}
+
+function handleTypeRushRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const result = typeRushEngine.endRound(roomId);
+  if (!result) return;
+
+  io.to(roomId).emit('typerush:round-end', {
+    rankings: result.rankings,
+    nextRoundIn: result.isGameOver ? 0 : 5,
+  });
+
+  if (result.isGameOver) {
+    const finalRankings = typeRushEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('typerush:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    typeRushEngine.removeGame(roomId);
+  } else {
+    setTimeout(() => startTypeRushRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -179,6 +226,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startScribbleRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'typerush') {
+    typeRushEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startTypeRushRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -488,6 +541,48 @@ export function setupSocketIO(
           timestamp: Date.now(),
           type: 'chat',
         });
+      }
+    });
+
+    // ─── TypeRush Game Events ───
+
+    socket.on('typerush:progress', (data: { roomId: string; charsTyped: number; errors: number; currentWord: number }) => {
+      const result = typeRushEngine.updateProgress(data.roomId, sessionId, data.charsTyped, data.errors, data.currentWord);
+      if (!result) return;
+
+      // Broadcast progress to all players
+      io.to(data.roomId).emit('typerush:player-progress', {
+        sessionId,
+        progress: result.progress,
+        wpm: result.wpm,
+        charsTyped: data.charsTyped,
+      });
+
+      // Notify about glitch effects
+      if (result.speedBoost) {
+        io.to(data.roomId).emit('typerush:speed-boost', { sessionId, bonus: result.speedBoost });
+      }
+      if (result.trapPenalty) {
+        io.to(data.roomId).emit('typerush:trap-triggered', { sessionId, penalty: result.trapPenalty });
+      }
+    });
+
+    socket.on('typerush:finished', (data: { roomId: string; totalTime: number; errors: number }) => {
+      const result = typeRushEngine.playerFinished(data.roomId, sessionId, data.totalTime, data.errors);
+      if (!result) return;
+
+      io.to(data.roomId).emit('typerush:player-finished', {
+        sessionId,
+        username,
+        position: result.position,
+        wpm: result.wpm,
+        accuracy: result.accuracy,
+        time: result.time,
+      });
+
+      // Check if round is complete
+      if (typeRushEngine.isRoundComplete(data.roomId)) {
+        handleTypeRushRoundEnd(io, data.roomId, roomStore);
       }
     });
 
