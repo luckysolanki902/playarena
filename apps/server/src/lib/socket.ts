@@ -12,6 +12,7 @@ import { NeonDriftEngine } from '../engine/neondrift';
 import { VoidfallEngine } from '../engine/voidfall';
 import { SyncShotEngine } from '../engine/syncshot';
 import { GlitchArenaEngine } from '../engine/glitcharena';
+import { OrbitBrawlEngine } from '../engine/orbitbrawl';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
@@ -21,6 +22,7 @@ const neonDriftEngine = new NeonDriftEngine();
 const voidfallEngine = new VoidfallEngine();
 const syncShotEngine = new SyncShotEngine();
 const glitchArenaEngine = new GlitchArenaEngine();
+const orbitBrawlEngine = new OrbitBrawlEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -629,6 +631,89 @@ function handleGlitchArenaRoundEnd(io: SocketIOServer, roomId: string, roomStore
   }
 }
 
+// ─── OrbitBrawl helpers ───
+
+function startOrbitBrawlRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const roundData = orbitBrawlEngine.startRound(roomId);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = orbitBrawlEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('orbitbrawl:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    orbitBrawlEngine.cleanup(roomId);
+    return;
+  }
+
+  const game = orbitBrawlEngine.getGameState(roomId);
+  if (!game) return;
+
+  io.to(roomId).emit('orbitbrawl:round-start', {
+    roundNumber: game.currentRound,
+    players: roundData.players,
+    settings: game.settings,
+  });
+
+  // Countdown before starting
+  let countdown = 3;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    io.to(roomId).emit('game:countdown', { count: countdown });
+    if (countdown <= 0) {
+      clearInterval(countdownInterval);
+      orbitBrawlEngine.markRoundActive(roomId);
+      
+      // Start tick loop
+      orbitBrawlEngine.startTick(roomId, (result) => {
+        if (!result) return;
+
+        io.to(roomId).emit('orbitbrawl:tick', {
+          players: result.state.players,
+        });
+
+        // Notify eliminations
+        for (const elim of result.eliminated) {
+          io.to(roomId).emit('orbitbrawl:player-eliminated', {
+            playerId: elim.playerId,
+            eliminatedBy: elim.eliminatedBy,
+            position: elim.position,
+          });
+        }
+
+        if (result.roundOver) {
+          handleOrbitBrawlRoundEnd(io, roomId, roomStore);
+        }
+      });
+    }
+  }, 1000);
+}
+
+function handleOrbitBrawlRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  orbitBrawlEngine.stopTick(roomId);
+  const result = orbitBrawlEngine.endRound(roomId);
+  if (!result) return;
+
+  const isGameOver = orbitBrawlEngine.isGameOver(roomId);
+  const finalResults = isGameOver ? orbitBrawlEngine.getFinalRankings(roomId) : undefined;
+
+  io.to(roomId).emit('orbitbrawl:round-end', {
+    roundNumber: orbitBrawlEngine.getGameState(roomId)?.currentRound ?? 0,
+    rankings: result,
+    isGameOver,
+    finalResults,
+  });
+
+  if (isGameOver) {
+    roomStore.setStatus(roomId, 'finished');
+    orbitBrawlEngine.cleanup(roomId);
+  } else {
+    setTimeout(() => startOrbitBrawlRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -688,6 +773,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startGlitchArenaRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'orbitbrawl') {
+    orbitBrawlEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startOrbitBrawlRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -1136,6 +1227,30 @@ export function setupSocketIO(
 
     socket.on('glitcharena:move', (data: { roomId: string; position: { x: number; y: number } }) => {
       glitchArenaEngine.updateCursorPosition(data.roomId, sessionId, data.position);
+    });
+
+    // ─── OrbitBrawl Game Events ───
+
+    socket.on('orbitbrawl:start-charge', (data: { roomId: string; chargeType: 'push' | 'pull' }) => {
+      orbitBrawlEngine.startCharge(data.roomId, sessionId, data.chargeType);
+    });
+
+    socket.on('orbitbrawl:release-charge', (data: { roomId: string }) => {
+      // Get chargeType before it's reset
+      const round = orbitBrawlEngine.getRoundState(data.roomId);
+      const player = round?.players[sessionId];
+      const chargeType = player?.chargeType;
+      
+      const result = orbitBrawlEngine.releaseCharge(data.roomId, sessionId);
+      if (result && player && chargeType) {
+        io.to(data.roomId).emit('orbitbrawl:force-used', {
+          playerId: sessionId,
+          position: player.position,
+          chargeType,
+          power: result.power,
+          radius: result.radius,
+        });
+      }
     });
 
     // ─── Chat Events ───

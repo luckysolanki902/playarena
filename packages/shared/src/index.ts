@@ -7,5 +7,6 @@ export * from './types/neondrift';
 export * from './types/voidfall';
 export * from './types/syncshot';
 export * from './types/glitcharena';
+export * from './types/orbitbrawl';
 export * from './types/events';
 export * from './utils/validation';
