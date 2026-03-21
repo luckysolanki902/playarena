@@ -9,12 +9,14 @@ import { ScribbleEngine } from '../engine/scribble';
 import { TypeRushEngine } from '../engine/typerush';
 import { PulseGridEngine } from '../engine/pulsegrid';
 import { NeonDriftEngine } from '../engine/neondrift';
+import { VoidfallEngine } from '../engine/voidfall';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
 const typeRushEngine = new TypeRushEngine();
 const pulseGridEngine = new PulseGridEngine();
 const neonDriftEngine = new NeonDriftEngine();
+const voidfallEngine = new VoidfallEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -348,6 +350,103 @@ function handleNeonDriftRoundEnd(io: SocketIOServer, roomId: string, roomStore: 
   }
 }
 
+// ─── Voidfall helpers ───
+
+function startVoidfallRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
+  const roundData = voidfallEngine.startRound(roomId, players);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = voidfallEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('voidfall:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    voidfallEngine.removeGame(roomId);
+    return;
+  }
+
+  io.to(roomId).emit('voidfall:round-start', {
+    round: roundData.round,
+    totalRounds: roundData.totalRounds,
+    arenaWidth: roundData.arenaWidth,
+    arenaHeight: roundData.arenaHeight,
+    players: roundData.players,
+    safeZone: roundData.safeZone,
+    tickRate: roundData.tickRate,
+    countdownSeconds: roundData.countdownSeconds,
+  });
+
+  // Round countdown before starting
+  let countdown = 3;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    if (countdown > 0) {
+      io.to(roomId).emit('voidfall:countdown', { seconds: countdown });
+    } else {
+      clearInterval(countdownInterval);
+      voidfallEngine.markRoundActive(roomId);
+      io.to(roomId).emit('voidfall:go', {});
+      // Start game tick
+      voidfallEngine.startTick(roomId, () => {
+        const tickResult = voidfallEngine.tick(roomId);
+        if (!tickResult) return;
+
+        io.to(roomId).emit('voidfall:tick', {
+          players: tickResult.players,
+          safeZone: tickResult.safeZone,
+          tick: tickResult.tick,
+        });
+
+        // Notify zone shrinking
+        if (tickResult.startShrinking) {
+          io.to(roomId).emit('voidfall:zone-shrinking', {
+            newTargetRadius: tickResult.safeZone.targetRadius,
+            duration: 15,
+          });
+        }
+
+        // Notify eliminations
+        for (const elim of tickResult.eliminated) {
+          const game = voidfallEngine.getGame(roomId);
+          const player = game?.currentRound?.players[elim.sessionId];
+          io.to(roomId).emit('voidfall:player-eliminated', {
+            sessionId: elim.sessionId,
+            username: player?.username ?? 'Unknown',
+            position: elim.position,
+          });
+        }
+
+        if (tickResult.roundOver) {
+          handleVoidfallRoundEnd(io, roomId, roomStore);
+        }
+      });
+    }
+  }, 1000);
+}
+
+function handleVoidfallRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  voidfallEngine.stopTick(roomId);
+  const result = voidfallEngine.endRound(roomId);
+  if (!result) return;
+
+  io.to(roomId).emit('voidfall:round-end', {
+    rankings: result.rankings,
+    nextRoundIn: result.isGameOver ? 0 : 5,
+  });
+
+  if (result.isGameOver) {
+    const finalRankings = voidfallEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('voidfall:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    voidfallEngine.removeGame(roomId);
+  } else {
+    setTimeout(() => startVoidfallRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -389,6 +488,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startNeonDriftRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'voidfall') {
+    voidfallEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startVoidfallRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -778,6 +883,16 @@ export function setupSocketIO(
 
     socket.on('neondrift:turn', (data: { roomId: string; direction: Direction }) => {
       neonDriftEngine.turn(data.roomId, sessionId, data.direction);
+    });
+
+    // ─── Voidfall Game Events ───
+
+    socket.on('voidfall:move', (data: { roomId: string; direction: { x: number; y: number } }) => {
+      voidfallEngine.setPlayerDirection(data.roomId, sessionId, data.direction);
+    });
+
+    socket.on('voidfall:stop', (data: { roomId: string }) => {
+      voidfallEngine.stopPlayer(data.roomId, sessionId);
     });
 
     // ─── Chat Events ───
