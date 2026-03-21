@@ -10,12 +10,25 @@ import { ScribbleEngine } from '../engine/scribble';
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
 
-// Timer references per room
+// Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Auto-start timers for public/quick-match rooms
+const autoStartTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; countdown: ReturnType<typeof setInterval> }>();
+
+const AUTO_START_DELAY = 15; // seconds
 
 function clearRoomTimer(roomId: string) {
   const t = roomTimers.get(roomId);
   if (t) { clearTimeout(t); roomTimers.delete(roomId); }
+}
+
+function clearAutoStartTimer(roomId: string) {
+  const ast = autoStartTimers.get(roomId);
+  if (ast) {
+    clearTimeout(ast.timer);
+    clearInterval(ast.countdown);
+    autoStartTimers.delete(roomId);
+  }
 }
 
 function handleRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
@@ -143,6 +156,72 @@ function handleScribbleRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
+/** Shared game-start logic used by both manual start and auto-start */
+function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room || room.status !== 'waiting') return;
+  if (room.players.length < 2) return;
+
+  clearAutoStartTimer(roomId);
+
+  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
+  roomStore.setStatus(roomId, 'starting');
+  io.to(roomId).emit('lobby:game-starting', { countdown: 3 });
+
+  if (room.game === 'wordle') {
+    wordleEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startNextRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'scribble') {
+    scribbleEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startScribbleRound(io, roomId, roomStore);
+    }, 3000);
+  }
+}
+
+/** Start auto-start countdown for public rooms when 2+ players */
+function maybeStartAutoStart(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+  if (room.visibility !== 'public') return; // Only public/quick-match rooms
+  if (room.status !== 'waiting') return;
+  if (room.players.length < 2) return;
+  // Already running?
+  if (autoStartTimers.has(roomId)) return;
+
+  let secondsLeft = AUTO_START_DELAY;
+  io.to(roomId).emit('lobby:auto-start', { secondsLeft });
+
+  const countdown = setInterval(() => {
+    secondsLeft--;
+    if (secondsLeft > 0) {
+      io.to(roomId).emit('lobby:auto-start', { secondsLeft });
+    }
+  }, 1000);
+
+  const timer = setTimeout(() => {
+    clearAutoStartTimer(roomId);
+    doStartGame(io, roomId, roomStore);
+  }, AUTO_START_DELAY * 1000);
+
+  autoStartTimers.set(roomId, { timer, countdown });
+}
+
+/** Cancel auto-start if players drop below 2 in public room */
+function maybeCancelAutoStart(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+  if (!autoStartTimers.has(roomId)) return;
+  if (room.players.length < 2) {
+    clearAutoStartTimer(roomId);
+    io.to(roomId).emit('lobby:auto-start-cancelled');
+  }
+}
+
 export function setupSocketIO(
   io: SocketIOServer,
   sessionStore: SessionStore,
@@ -225,6 +304,9 @@ export function setupSocketIO(
       socket.join(room.id);
       socket.data.currentRoomId = room.id;
       socket.emit('lobby:room-joined', { room: roomStore.get(room.id) });
+
+      // For public rooms, start auto-start countdown when 2+ players
+      maybeStartAutoStart(io, room.id, roomStore);
     });
 
     socket.on('lobby:leave-room', (data: { roomId: string }) => {
@@ -235,12 +317,19 @@ export function setupSocketIO(
       const updated = roomStore.get(data.roomId);
       if (updated) {
         socket.to(data.roomId).emit('lobby:room-updated', { room: updated });
+        // Cancel auto-start if players drop below 2
+        maybeCancelAutoStart(io, data.roomId, roomStore);
       }
     });
 
     socket.on('lobby:start-game', (data: { roomId: string }) => {
       const room = roomStore.get(data.roomId);
       if (!room) return;
+      // Only allow manual start for private rooms
+      if (room.visibility === 'public') {
+        socket.emit('lobby:error', { code: 'AUTO_START', message: 'Public rooms start automatically' });
+        return;
+      }
       if (room.hostSessionId !== sessionId) {
         socket.emit('lobby:error', { code: 'NOT_HOST', message: 'Only the host can start' });
         return;
@@ -250,23 +339,7 @@ export function setupSocketIO(
         return;
       }
 
-      const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
-      roomStore.setStatus(data.roomId, 'starting');
-      io.to(data.roomId).emit('lobby:game-starting', { countdown: 3 });
-
-      if (room.game === 'wordle') {
-        wordleEngine.createGame(data.roomId, players);
-        setTimeout(() => {
-          roomStore.setStatus(data.roomId, 'in_progress');
-          startNextRound(io, data.roomId, roomStore);
-        }, 3000);
-      } else if (room.game === 'scribble') {
-        scribbleEngine.createGame(data.roomId, players);
-        setTimeout(() => {
-          roomStore.setStatus(data.roomId, 'in_progress');
-          startScribbleRound(io, data.roomId, roomStore);
-        }, 3000);
-      }
+      doStartGame(io, data.roomId, roomStore);
     });
 
     // ─── Wordle Game Events ───

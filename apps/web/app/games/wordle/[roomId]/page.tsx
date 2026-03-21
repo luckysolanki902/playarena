@@ -37,6 +37,8 @@ export default function MultiplayerWordlePage() {
 
   const [phase, setPhase] = useState<Phase>("lobby");
   const [players, setPlayers] = useState<Player[]>([]);
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [autoStartSeconds, setAutoStartSeconds] = useState<number | null>(null);
   const [countdown, setCountdown] = useState(3);
   const [round, setRound] = useState(1);
   const [totalRounds, setTotalRounds] = useState(3);
@@ -81,7 +83,11 @@ export default function MultiplayerWordlePage() {
 
     socket.emit("lobby:join-room", { roomId });
 
-    socket.on("lobby:room-joined", ({ room }) => { setPlayers(room.players); sfx.join(); });
+    socket.on("lobby:room-joined", ({ room }) => {
+      setPlayers(room.players);
+      setVisibility(room.visibility);
+      sfx.join();
+    });
     socket.on("lobby:player-joined", ({ player }) => {
       setPlayers((prev) => [...prev.filter((p) => p.sessionId !== player.sessionId), player]);
       sfx.join();
@@ -89,7 +95,18 @@ export default function MultiplayerWordlePage() {
     socket.on("lobby:player-left", ({ sessionId: sid }) => {
       setPlayers((prev) => prev.filter((p) => p.sessionId !== sid));
     });
-    socket.on("lobby:room-updated", ({ room }) => setPlayers(room.players));
+    socket.on("lobby:room-updated", ({ room }) => {
+      setPlayers(room.players);
+      setVisibility(room.visibility);
+    });
+
+    // Auto-start for public rooms
+    socket.on("lobby:auto-start", ({ secondsLeft }) => {
+      setAutoStartSeconds(secondsLeft);
+    });
+    socket.on("lobby:auto-start-cancelled", () => {
+      setAutoStartSeconds(null);
+    });
 
     socket.on("lobby:game-starting", ({ countdown: c }) => {
       setPhase("countdown");
@@ -321,13 +338,25 @@ export default function MultiplayerWordlePage() {
                 ))}
               </div>
               {isHost ? (
-                <button onClick={startGame} disabled={players.length < 2}
-                  className="btn-game px-8 py-3 rounded-2xl font-bold text-sm text-white cursor-pointer disabled:opacity-40"
-                  style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
-                  {players.length < 2 ? "Waiting for players..." : "Start Game"}
-                </button>
+                visibility === "private" ? (
+                  <button onClick={startGame} disabled={players.length < 2}
+                    className="btn-game px-8 py-3 rounded-2xl font-bold text-sm text-white cursor-pointer disabled:opacity-40"
+                    style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
+                    {players.length < 2 ? "Waiting for players..." : "Start Game"}
+                  </button>
+                ) : (
+                  <p className="text-sm font-bold tabular-nums" style={{ color: "var(--accent-primary)" }}>
+                    {autoStartSeconds !== null ? `Starting in ${autoStartSeconds}s...` : "Waiting for players..."}
+                  </p>
+                )
               ) : (
-                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Waiting for the host to start...</p>
+                visibility === "private" ? (
+                  <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Waiting for the host to start...</p>
+                ) : (
+                  <p className="text-sm font-bold tabular-nums" style={{ color: "var(--accent-primary)" }}>
+                    {autoStartSeconds !== null ? `Starting in ${autoStartSeconds}s...` : "Waiting for players..."}
+                  </p>
+                )
               )}
             </motion.div>
           )}
