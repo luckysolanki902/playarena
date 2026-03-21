@@ -33,7 +33,7 @@ function buildShareText(guesses: Guess[], won: boolean): string {
       g.feedback.map((f) => (f === "correct" ? "\u{1F7E9}" : f === "present" ? "\u{1F7E8}" : "\u{2B1B}")).join(""),
     )
     .join("\n");
-  return `PlayArena Wordle ${won ? `${guesses.length}/${MAX_ATTEMPTS}` : `X/${MAX_ATTEMPTS}`}\n\n${grid}\n\nplayarena.vercel.app`;
+  return `Spyllio Wordle ${won ? `${guesses.length}/${MAX_ATTEMPTS}` : `X/${MAX_ATTEMPTS}`}\n\n${grid}\n\nspyllio.vercel.app`;
 }
 
 export default function SoloWordlePage() {

@@ -65,7 +65,7 @@ const io = new SocketIOServer(app.server, {
 
 setupSocketIO(io, sessionStore, roomStore);
 
-app.log.info(`PlayArena server running on port ${PORT}`);
+app.log.info(`Spyllio server running on port ${PORT}`);
 
 // Cleanup: expire sessions every 5 minutes
 setInterval(() => {

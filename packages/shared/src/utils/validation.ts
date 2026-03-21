@@ -1,6 +1,6 @@
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,16}$/;
 const RESERVED_NAMES = new Set([
-  'admin', 'system', 'bot', 'playarena', 'mod', 'moderator',
+  'admin', 'system', 'bot', 'playarena', 'spyllio', 'mod', 'moderator',
   'server', 'null', 'undefined',
 ]);
 

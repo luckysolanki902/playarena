@@ -105,10 +105,10 @@ export default function Home() {
           >
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base font-black"
               style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
-              P
+              S
             </div>
             <span className="text-lg font-extrabold tracking-tight" style={{ color: "var(--text-primary)" }}>
-              play<span style={{ color: "var(--accent-primary)" }}>arena</span>
+              spyl<span style={{ color: "var(--accent-primary)" }}>lio</span>
             </span>
           </motion.div>
 

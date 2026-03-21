@@ -9,15 +9,32 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: 'PlayArena — Play Word Games Together',
+  title: 'Spyllio — Fun Multiplayer Games with Friends',
   description:
-    'A cozy place to play Wordle and more with friends. No sign-up needed.',
-  keywords: ['wordle', 'multiplayer games', 'word games', 'play with friends'],
+    'Play Wordle, Scribble, and more party games with friends instantly. No sign-up needed. Draw, guess, type, and compete in real-time multiplayer games.',
+  keywords: [
+    'spyllio', 'multiplayer games', 'party games', 'wordle multiplayer', 'scribble game',
+    'draw and guess', 'typing games', 'play with friends', 'online games', 'browser games',
+    'word games', 'fun games', 'casual games', 'real-time games', 'no signup games'
+  ],
   openGraph: {
-    title: 'PlayArena — Play Word Games Together',
-    description: 'A cozy place to play Wordle and more with friends.',
+    title: 'Spyllio — Fun Multiplayer Games with Friends',
+    description: 'Play Wordle, Scribble, and more party games with friends. No sign-up needed!',
     type: 'website',
-    siteName: 'PlayArena',
+    siteName: 'Spyllio',
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Spyllio — Fun Multiplayer Games',
+    description: 'Play Wordle, Scribble, and more with friends instantly!',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: 'https://spyllio.vercel.app',
   },
 };
 

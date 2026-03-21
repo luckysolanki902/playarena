@@ -1,11 +1,12 @@
-# 🎮 PlayArena
+# 🎮 Spyllio
 
-Real-time multiplayer games platform. No sign-up. Just play.
+Real-time multiplayer party games platform. No sign-up. Just play.
 
 ## Games
 - **Wordle** — 5 letters, 6 guesses, real-time duels
-- **Scribble** — Draw, guess, and laugh together *(coming soon)*
-- **More** — TypeRacer, Trivia, Connect Four *(planned)*
+- **Scribble** — Draw, guess, and laugh together
+- **TypeRush** — Typing race with glitch words *(coming soon)*
+- **More** — PulseGrid, Neon Drift, Voidfall, and more *(planned)*
 
 ## Tech Stack
 | Layer | Tech |
@@ -30,7 +31,7 @@ pnpm dev
 
 ## Project Structure
 ```
-playarena/
+spyllio/
 ├── apps/
 │   ├── web/          # Next.js frontend
 │   └── server/       # Fastify + Socket.IO backend
