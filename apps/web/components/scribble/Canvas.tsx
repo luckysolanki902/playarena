@@ -274,7 +274,15 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       const pos = normalize(e.nativeEvent);
       if (!pos) return;
       lastPos.current = pos;
-      if (tool === 'pen' || tool === 'eraser') {
+      if (tool === 'fill') {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (ctx) {
+          floodFill(ctx, pos.x, pos.y, effectiveColor);
+          const fillPt: DrawPoint = { x: pos.x, y: pos.y, type: "fill", color: effectiveColor, width: effectiveWidth };
+          onDraw([fillPt]);
+        }
+        isDrawing.current = false;
+      } else if (tool === 'pen' || tool === 'eraser') {
         const pt: DrawPoint = { ...pos, type: "start", color: effectiveColor, width: effectiveWidth };
         pendingPoints.current.push(pt);
         const ctx = canvasRef.current?.getContext("2d");
@@ -286,7 +294,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
         if (canvas && ctx) canvasSnapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
       }
     },
-    [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawDot, tool],
+    [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawDot, tool, floodFill, onDraw],
   );
 
   const handleMouseMove = useCallback(
