@@ -187,9 +187,19 @@ function startTypeRushRound(io: SocketIOServer, roomId: string, roomStore: RoomS
     text: roundData.text,
     words: roundData.words,
   });
+
+  // Set round timeout (120s) so round doesn't hang if players don't finish
+  clearRoomTimer(roomId);
+  const timer = setTimeout(() => {
+    if (!typeRushEngine.isRoundComplete(roomId)) {
+      handleTypeRushRoundEnd(io, roomId, roomStore);
+    }
+  }, 120_000);
+  roomTimers.set(roomId, timer);
 }
 
 function handleTypeRushRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  clearRoomTimer(roomId);
   const result = typeRushEngine.endRound(roomId);
   if (!result) return;
 
@@ -591,6 +601,7 @@ export function setupSocketIO(
       // Broadcast opponent progress (feedback only, no letters)
       socket.to(data.roomId).emit('wordle:opponent-guess', {
         sessionId,
+        username,
         attempt: result.attempt!,
         feedback: result.feedback!,
       });

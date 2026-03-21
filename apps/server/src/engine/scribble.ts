@@ -132,7 +132,7 @@ export class ScribbleEngine {
     }
 
     const wordChoices = getWordChoices(3);
-    const timeLimit = 80;
+    const timeLimit = 160;
 
     game.phase = 'choosing';
     game.currentRound = {

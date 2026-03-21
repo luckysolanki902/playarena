@@ -11,17 +11,17 @@ import type { PulseGridCell } from "@playarena/shared";
 
 type Phase = "lobby" | "countdown" | "playing" | "round-end" | "game-end";
 
-interface Player { sessionId: string; username: string; isHost: boolean; }
-interface GamePlayer { sessionId: string; username: string; color: string; }
-interface RoundRanking { sessionId: string; username: string; cellCount: number; score: number; position: number; }
-interface FinalRanking { sessionId: string; username: string; totalScore: number; totalCells: number; }
-
 function ordinal(n: number): string {
   if (n === 1) return "1st";
   if (n === 2) return "2nd";
   if (n === 3) return "3rd";
   return `${n}th`;
 }
+
+interface Player { sessionId: string; username: string; isHost: boolean; }
+interface GamePlayer { sessionId: string; username: string; color: string; }
+interface RoundRanking { sessionId: string; username: string; cellCount: number; score: number; position: number; }
+interface FinalRanking { sessionId: string; username: string; totalScore: number; totalCells: number; }
 
 export default function PulseGridRoomPage() {
   const params = useParams<{ roomId: string }>();
@@ -380,6 +380,23 @@ export default function PulseGridRoomPage() {
         {phase === "round-end" && roundRankings.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-5">
             <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Round {round} Results</h2>
+            {/* Personal rank message */}
+            {(() => {
+              const myRank = roundRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-2xl font-black" style={{ color: "#22d3ee" }}>
+                  🏆 You won this round!
+                </motion.div>
+              );
+              if (myRank >= 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-lg font-bold" style={{ color: "var(--text-secondary)" }}>
+                  You came {ordinal(myRank + 1)}!
+                </motion.div>
+              );
+              return null;
+            })()}
             <div className="flex flex-col gap-2 w-72">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
@@ -413,7 +430,56 @@ export default function PulseGridRoomPage() {
         {/* Game End */}
         {phase === "game-end" && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6">
-            <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>🏆 Game Over!</h2>
+            {/* Confetti burst */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden z-40">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <motion.div key={i}
+                  initial={{ y: -20, x: Math.random() * (typeof window !== "undefined" ? window.innerWidth : 400), opacity: 1, rotate: 0 }}
+                  animate={{ y: (typeof window !== "undefined" ? window.innerHeight : 800) + 50, opacity: 0, rotate: Math.random() * 720 - 360 }}
+                  transition={{ duration: 2 + Math.random() * 2, delay: Math.random() * 0.5, ease: "easeIn" }}
+                  className="absolute w-3 h-3 rounded-sm"
+                  style={{ background: ["#22d3ee", "#ffd166", "#ff6b6b", "#a78bfa", "#22c55e"][i % 5] }}
+                />
+              ))}
+            </div>
+            {/* Personal rank celebration */}
+            {(() => {
+              const myRank = finalRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-5xl mb-2">🏆</div>
+                  <h2 className="text-3xl font-black" style={{ color: "#22d3ee" }}>You Won!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-secondary)" }}>Woohoo! Territory master!</p>
+                </motion.div>
+              );
+              if (myRank === 1) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥈</div>
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-secondary)" }}>2nd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>So close!</p>
+                </motion.div>
+              );
+              if (myRank === 2) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥉</div>
+                  <h2 className="text-2xl font-black" style={{ color: "#cd7f32" }}>3rd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Nice effort!</p>
+                </motion.div>
+              );
+              if (myRank >= 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>You came {ordinal(myRank + 1)}</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Better luck next time!</p>
+                </motion.div>
+              );
+              return null;
+            })()}
+            <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>Game Over!</h2>
             <div className="flex flex-col gap-2 w-80">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}

@@ -541,6 +541,23 @@ export default function TypeRushRoomPage() {
         {phase === "round-end" && roundRankings.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-5">
             <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Round {round} Results</h2>
+            {/* Personal rank message */}
+            {(() => {
+              const myRank = roundRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-2xl font-black" style={{ color: "#a78bfa" }}>
+                  🏆 You won this round!
+                </motion.div>
+              );
+              if (myRank >= 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-lg font-bold" style={{ color: "var(--text-secondary)" }}>
+                  You came {ordinal(myRank + 1)}!
+                </motion.div>
+              );
+              return null;
+            })()}
             <div className="flex flex-col gap-2 w-72">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
@@ -578,12 +595,60 @@ export default function TypeRushRoomPage() {
         {/* Game End */}
         {phase === "game-end" && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6">
-            <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>🏁 Race Complete!</h2>
+            {/* Confetti burst */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden z-40">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <motion.div key={i}
+                  initial={{ y: -20, x: Math.random() * (typeof window !== "undefined" ? window.innerWidth : 400), opacity: 1, rotate: 0 }}
+                  animate={{ y: (typeof window !== "undefined" ? window.innerHeight : 800) + 50, opacity: 0, rotate: Math.random() * 720 - 360 }}
+                  transition={{ duration: 2 + Math.random() * 2, delay: Math.random() * 0.5, ease: "easeIn" }}
+                  className="absolute w-3 h-3 rounded-sm"
+                  style={{ background: ["#a78bfa", "#ffd166", "#4ecdc4", "#ff6b6b", "#22c55e"][i % 5] }}
+                />
+              ))}
+            </div>
+            {/* Personal rank celebration */}
+            {(() => {
+              const myRank = finalRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-5xl mb-2">🏆</div>
+                  <h2 className="text-3xl font-black" style={{ color: "#a78bfa" }}>You Won!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-secondary)" }}>Woohoo! Speed demon!</p>
+                </motion.div>
+              );
+              if (myRank === 1) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥈</div>
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-secondary)" }}>2nd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Almost there!</p>
+                </motion.div>
+              );
+              if (myRank === 2) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥉</div>
+                  <h2 className="text-2xl font-black" style={{ color: "#cd7f32" }}>3rd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Nice effort!</p>
+                </motion.div>
+              );
+              return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>You came {ordinal(myRank + 1)}</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Better luck next time!</p>
+                </motion.div>
+              );
+            })()}
+            <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>🏁 Race Complete!</h2>
             <div className="flex flex-col gap-2 w-80">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
+                  transition={{ delay: 0.5 + i * 0.1 }}
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
                   style={{
                     background: r.sessionId === session?.sessionId ? "rgba(167,139,250,0.15)" : "var(--bg-card)",
@@ -596,7 +661,7 @@ export default function TypeRushRoomPage() {
                       i === 2 ? "bg-amber-600 text-white" :
                       "bg-gray-700 text-white"
                     }`}>
-                      {i + 1}
+                      {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
                     </span>
                     <div>
                       <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{r.username}</p>

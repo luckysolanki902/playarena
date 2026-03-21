@@ -114,14 +114,10 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2"
+            className="flex items-center"
           >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base font-black"
-              style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
-              S
-            </div>
-            <span className="text-lg font-extrabold tracking-tight" style={{ color: "var(--text-primary)" }}>
-              spyl<span style={{ color: "var(--accent-primary)" }}>lio</span>
+            <span className="text-2xl font-extrabold tracking-tight" style={{ fontFamily: "'Liquids', sans-serif", color: "var(--accent-primary)" }}>
+              spyllio
             </span>
           </motion.div>
 

@@ -9,7 +9,7 @@ import { getRandomWord, isValidGuess, ANSWER_WORDS } from '../data/words';
 
 const DEFAULT_SETTINGS: WordleSettings = {
   rounds: 3,
-  timeLimit: 120,
+  timeLimit: 240,
   wordLength: 5,
   hintsEnabled: true,
 };

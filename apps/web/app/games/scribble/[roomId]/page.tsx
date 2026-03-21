@@ -571,6 +571,23 @@ export default function ScribbleRoom() {
                 The word was <span className="font-extrabold capitalize" style={{ color: "var(--accent-warm)" }}>{roundWord}</span>
               </p>
             </div>
+            {/* Personal rank message */}
+            {(() => {
+              const myRank = roundRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0 && roundRankings[0]?.roundScore > 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-2xl font-black" style={{ color: "var(--accent-warm)" }}>
+                  🏆 You won this round!
+                </motion.div>
+              );
+              if (myRank >= 0 && roundRankings[myRank]?.roundScore > 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                  className="text-lg font-bold" style={{ color: "var(--text-secondary)" }}>
+                  You came {ordinal(myRank + 1)}!
+                </motion.div>
+              );
+              return null;
+            })()}
             <div className="flex flex-col gap-2 w-72">
               {roundRankings.map((r, i) => (
                 <motion.div key={r.sessionId} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
@@ -601,9 +618,57 @@ export default function ScribbleRoom() {
         {/* === GAME END === */}
         {phase === "game-end" && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
+            {/* Confetti burst */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden z-40">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <motion.div key={i}
+                  initial={{ y: -20, x: Math.random() * (typeof window !== "undefined" ? window.innerWidth : 400), opacity: 1, rotate: 0 }}
+                  animate={{ y: (typeof window !== "undefined" ? window.innerHeight : 800) + 50, opacity: 0, rotate: Math.random() * 720 - 360 }}
+                  transition={{ duration: 2 + Math.random() * 2, delay: Math.random() * 0.5, ease: "easeIn" }}
+                  className="absolute w-3 h-3 rounded-sm"
+                  style={{ background: ["#ffd166", "#4ecdc4", "#ff6b6b", "#a78bfa", "#22c55e"][i % 5] }}
+                />
+              ))}
+            </div>
+            {/* Personal rank celebration */}
+            {(() => {
+              const myRank = finalRankings.findIndex((r) => r.sessionId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-5xl mb-2">🏆</div>
+                  <h2 className="text-3xl font-black" style={{ color: "var(--accent-warm)" }}>You Won!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-secondary)" }}>Woohoo! Artist supreme!</p>
+                </motion.div>
+              );
+              if (myRank === 1) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥈</div>
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-secondary)" }}>2nd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>So close!</p>
+                </motion.div>
+              );
+              if (myRank === 2) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <div className="text-4xl mb-2">🥉</div>
+                  <h2 className="text-2xl font-black" style={{ color: "#cd7f32" }}>3rd Place!</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Nice effort!</p>
+                </motion.div>
+              );
+              if (myRank >= 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.3 }}
+                  className="text-center">
+                  <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>You came {ordinal(myRank + 1)}</h2>
+                  <p className="text-sm font-bold mt-1" style={{ color: "var(--text-muted)" }}>Better luck next time!</p>
+                </motion.div>
+              );
+              return null;
+            })()}
             <div className="text-center">
-              <div className="text-5xl mb-3">🏆</div>
-              <h2 className="text-2xl font-black mb-1" style={{ color: "var(--text-primary)" }}>Game Over!</h2>
+              <h2 className="text-xl font-black mb-1" style={{ color: "var(--text-primary)" }}>Game Over!</h2>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>{totalRounds} rounds · {players.length} players</p>
             </div>
             <div className="flex flex-col gap-2 w-72">

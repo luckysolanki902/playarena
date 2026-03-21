@@ -66,6 +66,7 @@ export default function SyncShotRoom() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playersRef = useRef(players);
   const targetRef = useRef(activeTarget);
+  const lastMoveRef = useRef(0);
 
   useEffect(() => {
     playersRef.current = players;
@@ -292,10 +293,14 @@ export default function SyncShotRoom() {
     };
   }, [phase]);
 
-  // Mouse tracking
+  // Mouse tracking (throttled to reduce socket spam)
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!socket || phase !== 'playing') return;
+
+      const now = Date.now();
+      if (now - lastMoveRef.current < 33) return; // ~30fps throttle
+      lastMoveRef.current = now;
 
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -524,6 +529,60 @@ export default function SyncShotRoom() {
             animate={{ opacity: 1, scale: 1 }}
             className="text-center max-w-md w-full"
           >
+            {/* Confetti for game-over */}
+            {phase === 'game-over' && (
+              <div className="fixed inset-0 pointer-events-none overflow-hidden z-40">
+                {Array.from({ length: 30 }).map((_, i) => (
+                  <motion.div key={i}
+                    initial={{ y: -20, x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 400), opacity: 1, rotate: 0 }}
+                    animate={{ y: (typeof window !== 'undefined' ? window.innerHeight : 800) + 50, opacity: 0, rotate: Math.random() * 720 - 360 }}
+                    transition={{ duration: 2 + Math.random() * 2, delay: Math.random() * 0.5, ease: 'easeIn' }}
+                    className="absolute w-3 h-3 rounded-sm"
+                    style={{ background: ['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#a78bfa'][i % 5] }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Personal rank celebration for game-over */}
+            {phase === 'game-over' && (() => {
+              const results = roundResults.finalResults || [];
+              const myRank = results.findIndex((r) => r.oddsId === session?.sessionId);
+              if (myRank === 0) return (
+                <motion.div initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 200, delay: 0.3 }}
+                  className="mb-4">
+                  <div className="text-5xl mb-2">🏆</div>
+                  <h2 className="text-3xl font-bold" style={{ color: THEME_COLOR }}>You Won!</h2>
+                  <p className="text-sm text-gray-400 mt-1">Woohoo! Sharpshooter!</p>
+                </motion.div>
+              );
+              if (myRank === 1) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.3 }}
+                  className="mb-4">
+                  <div className="text-4xl mb-2">🥈</div>
+                  <h2 className="text-2xl font-bold text-gray-300">2nd Place!</h2>
+                  <p className="text-sm text-gray-500 mt-1">So close!</p>
+                </motion.div>
+              );
+              if (myRank === 2) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.3 }}
+                  className="mb-4">
+                  <div className="text-4xl mb-2">🥉</div>
+                  <h2 className="text-2xl font-bold" style={{ color: '#cd7f32' }}>3rd Place!</h2>
+                  <p className="text-sm text-gray-500 mt-1">Nice effort!</p>
+                </motion.div>
+              );
+              if (myRank >= 0) return (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.3 }}
+                  className="mb-4">
+                  <h2 className="text-2xl font-bold text-white">You came {myRank + 1}th</h2>
+                  <p className="text-sm text-gray-500 mt-1">Better luck next time!</p>
+                </motion.div>
+              );
+              return null;
+            })()}
+
             <h2 className="text-3xl font-bold mb-2" style={{ color: THEME_COLOR }}>
               {phase === 'game-over' ? '🏆 Game Over!' : `Round ${roundNumber} Complete`}
             </h2>
