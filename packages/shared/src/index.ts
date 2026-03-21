@@ -5,5 +5,6 @@ export * from './types/typerush';
 export * from './types/pulsegrid';
 export * from './types/neondrift';
 export * from './types/voidfall';
+export * from './types/syncshot';
 export * from './types/events';
 export * from './utils/validation';

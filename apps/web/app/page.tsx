@@ -106,10 +106,10 @@ const GAMES: Game[] = [
     id: "syncshot",
     name: "SyncShot",
     tagline: "Cursor sniper showdown",
-    color: "#34d399",
-    bgGlow: "rgba(52, 211, 153, 0.12)",
+    color: "#f59e0b",
+    bgGlow: "rgba(245, 158, 11, 0.12)",
     letter: "⊕",
-    ready: false,
+    ready: true,
     category: "action",
   },
   // Party

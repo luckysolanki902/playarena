@@ -10,6 +10,7 @@ import { TypeRushEngine } from '../engine/typerush';
 import { PulseGridEngine } from '../engine/pulsegrid';
 import { NeonDriftEngine } from '../engine/neondrift';
 import { VoidfallEngine } from '../engine/voidfall';
+import { SyncShotEngine } from '../engine/syncshot';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
@@ -17,6 +18,7 @@ const typeRushEngine = new TypeRushEngine();
 const pulseGridEngine = new PulseGridEngine();
 const neonDriftEngine = new NeonDriftEngine();
 const voidfallEngine = new VoidfallEngine();
+const syncShotEngine = new SyncShotEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -447,6 +449,90 @@ function handleVoidfallRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
+// ─── SyncShot helpers ───
+
+function startSyncShotRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const players = room.players.map((p) => ({ oddsId: p.sessionId, oddsName: p.username }));
+  const roundData = syncShotEngine.startRound(roomId);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = syncShotEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('syncshot:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    syncShotEngine.cleanup(roomId);
+    return;
+  }
+
+  const game = syncShotEngine.getGameState(roomId);
+  if (!game) return;
+
+  io.to(roomId).emit('syncshot:round-start', {
+    roundNumber: game.currentRound,
+    players: roundData.players,
+    settings: game.settings,
+  });
+
+  // Countdown before starting
+  let countdown = 3;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    io.to(roomId).emit('game:countdown', { count: countdown });
+    if (countdown <= 0) {
+      clearInterval(countdownInterval);
+      syncShotEngine.markRoundActive(roomId);
+      
+      // Start tick loop
+      syncShotEngine.startTick(roomId, (state) => {
+        io.to(roomId).emit('syncshot:tick', {
+          players: state.players,
+          activeTarget: state.activeTarget,
+          targetsHit: state.targetsHit,
+          targetsSpawned: state.targetsSpawned,
+        });
+      });
+
+      // Start spawning targets
+      syncShotEngine.startSpawning(
+        roomId,
+        (target) => {
+          io.to(roomId).emit('syncshot:target-spawn', { target });
+        },
+        () => {
+          handleSyncShotRoundEnd(io, roomId, roomStore);
+        }
+      );
+    }
+  }, 1000);
+}
+
+function handleSyncShotRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  syncShotEngine.stopTick(roomId);
+  syncShotEngine.stopSpawning(roomId);
+  const result = syncShotEngine.endRound(roomId);
+  if (!result) return;
+
+  const isGameOver = syncShotEngine.isGameOver(roomId);
+  const finalResults = isGameOver ? syncShotEngine.getFinalRankings(roomId) : undefined;
+
+  io.to(roomId).emit('syncshot:round-end', {
+    roundNumber: syncShotEngine.getGameState(roomId)?.currentRound ?? 0,
+    results: result,
+    isGameOver,
+    finalResults,
+  });
+
+  if (isGameOver) {
+    roomStore.setStatus(roomId, 'finished');
+    syncShotEngine.cleanup(roomId);
+  } else {
+    setTimeout(() => startSyncShotRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -494,6 +580,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startVoidfallRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'syncshot') {
+    syncShotEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startSyncShotRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -893,6 +985,29 @@ export function setupSocketIO(
 
     socket.on('voidfall:stop', (data: { roomId: string }) => {
       voidfallEngine.stopPlayer(data.roomId, sessionId);
+    });
+
+    // ─── SyncShot Game Events ───
+
+    socket.on('syncshot:move', (data: { roomId: string; position: { x: number; y: number } }) => {
+      syncShotEngine.updateCursorPosition(data.roomId, sessionId, data.position);
+    });
+
+    socket.on('syncshot:shoot', (data: { roomId: string; position: { x: number; y: number } }) => {
+      const result = syncShotEngine.shoot(data.roomId, sessionId, data.position);
+      if (!result) return;
+
+      if (result.hit && result.target) {
+        io.to(data.roomId).emit('syncshot:target-hit', {
+          targetId: result.target.id,
+          hitBy: sessionId,
+          hitTime: result.target.hitTime,
+          points: result.points ?? 0,
+          speedBonus: result.speedBonus ?? 0,
+        });
+      } else {
+        socket.emit('syncshot:miss', { playerId: sessionId, position: data.position });
+      }
     });
 
     // ─── Chat Events ───
