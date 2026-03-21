@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* ─── Liquids Font ─── */
+@font-face {
+  font-family: 'Liquids';
+  src: url('/fonts/Liquids.otf') format('opentype'),
+       url('/fonts/Liquids.ttf') format('truetype');
+  font-display: swap;
+}
+
 /* ─── Cozy Game Palette ─── */
 :root {
   --bg-primary: #1a1a2e;

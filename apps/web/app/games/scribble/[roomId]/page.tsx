@@ -221,6 +221,43 @@ export default function ScribbleRoom() {
       setPhase("game-end"); setFinalRankings(fr); sfx.win();
     });
 
+    // Reconnection — restore game state after tab switch / disconnect
+    socket.on("scribble:rejoin-state", (state: {
+      phase: string; round: number; totalRounds: number;
+      drawerId: string; drawerUsername: string; isDrawer: boolean;
+      word: string; hintPattern: string; wordLength: number;
+      timeLimit: number; elapsed: number; strokes: DrawStroke[];
+      players: Array<{ sessionId: string; username: string; score: number; roundScore: number; hasGuessed: boolean; isDrawing: boolean }>;
+    }) => {
+      setRound(state.round); setTotalRounds(state.totalRounds);
+      setIsDrawer(state.isDrawer); setDrawerUsername(state.drawerUsername);
+      setHintPattern(state.hintPattern); setWordLength(state.wordLength);
+      setGamePlayers(state.players);
+      if (state.isDrawer && state.word) setMyWord(state.word);
+
+      if (state.phase === "drawing") {
+        setPhase("drawing");
+        setTimeLimit(state.timeLimit);
+        const remaining = Math.max(0, state.timeLimit - state.elapsed);
+        setTimeLeft(remaining); setCanvasActive(true);
+        // Replay strokes on canvas
+        setStrokes(state.strokes);
+        // Start client-side timer from remaining time
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) { if (timerRef.current) clearInterval(timerRef.current); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+        // Mark if we already guessed
+        const me = state.players.find((p) => p.sessionId === session.sessionId);
+        if (me?.hasGuessed) setHasGuessedCorrectly(true);
+      } else if (state.phase === "choosing") {
+        setPhase("choosing");
+      }
+    });
+
     socket.on("lobby:error", ({ message }: { message: string }) => { showToast(message, 3000); sfx.fail(); });
 
     return () => {
@@ -599,7 +636,7 @@ export default function ScribbleRoom() {
       </div>
 
       <footer className="relative z-10 py-2 text-center text-xs shrink-0" style={{ color: "var(--text-muted)" }}>
-        Made with care by <span style={{ color: "var(--accent-warm)" }}>Dharaa Singh</span>
+        Powered by <span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span>
       </footer>
     </div>
   );

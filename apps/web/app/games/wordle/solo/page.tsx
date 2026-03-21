@@ -318,8 +318,8 @@ export default function SoloWordlePage() {
         )}
       </div>
 
-      <footer className="relative z-10 py-3 text-center text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-        Made with care by <span style={{ color: "var(--accent-warm)" }}>Dharaa Singh</span>
+      <footer className="relative z-10 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+        Powered by <span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span>
       </footer>
     </div>
   );

@@ -485,7 +485,22 @@ export function setupSocketIO(
         socket.emit('lobby:error', { code: 'ROOM_NOT_FOUND', message: 'Room not found' });
         return;
       }
+
+      // Allow reconnection to in-progress scribble games
       if (room.status !== 'waiting') {
+        const scribbleGame = scribbleEngine.getGame(room.id);
+        const gameState = scribbleGame ? scribbleEngine.getGameState(room.id, sessionId) : null;
+        const wasInGame = scribbleGame?.players?.has(sessionId);
+
+        if (wasInGame && gameState) {
+          // Reconnecting player — rejoin socket room and send current state
+          socket.join(room.id);
+          socket.data.currentRoomId = room.id;
+          socket.emit('lobby:room-joined', { room });
+          socket.emit('scribble:rejoin-state', gameState);
+          return;
+        }
+
         socket.emit('lobby:error', { code: 'ROOM_IN_PROGRESS', message: 'Game already started' });
         return;
       }
@@ -827,15 +842,35 @@ export function setupSocketIO(
 
     socket.on('disconnect', () => {
       sessionStore.touch(sessionId);
-      // Remove player from their room on disconnect and notify others
       const currentRoomId = socket.data.currentRoomId as string | undefined;
-      if (currentRoomId) {
-        roomStore.removePlayer(currentRoomId, sessionId);
-        socket.to(currentRoomId).emit('lobby:player-left', { sessionId, username });
-        const updated = roomStore.get(currentRoomId);
-        if (updated) {
-          socket.to(currentRoomId).emit('lobby:room-updated', { room: updated });
+      if (!currentRoomId) return;
+
+      const room = roomStore.get(currentRoomId);
+
+      // Handle scribble game cleanup if game is in progress
+      const scribbleGame = scribbleEngine.getGame(currentRoomId);
+      if (scribbleGame) {
+        const removal = scribbleEngine.removePlayer(currentRoomId, sessionId);
+        if (removal) {
+          if (removal.playersLeft < 2) {
+            // Not enough players — end the game
+            const finalRankings = scribbleEngine.getFinalRankings(currentRoomId);
+            io.to(currentRoomId).emit('scribble:game-end', { finalRankings });
+            roomStore.setStatus(currentRoomId, 'finished');
+            scribbleEngine.removeGame(currentRoomId);
+          } else if (removal.wasDrawer) {
+            // Drawer left — end current round and move to next
+            handleScribbleRoundEnd(io, currentRoomId, roomStore);
+          }
         }
+      }
+
+      // Remove player from room and notify others
+      roomStore.removePlayer(currentRoomId, sessionId);
+      socket.to(currentRoomId).emit('lobby:player-left', { sessionId, username });
+      const updated = roomStore.get(currentRoomId);
+      if (updated) {
+        socket.to(currentRoomId).emit('lobby:room-updated', { room: updated });
       }
     });
   });

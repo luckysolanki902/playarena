@@ -333,6 +333,9 @@ export class ScribbleEngine {
     const isGameOver = game.round >= game.totalRounds;
     if (isGameOver) game.phase = 'finished';
 
+    // Null out currentRound to prevent double round-end processing
+    game.currentRound = null;
+
     return { word, rankings, isGameOver };
   }
 
@@ -358,5 +361,76 @@ export class ScribbleEngine {
     if (!game?.currentRound || game.phase !== 'drawing') return false;
     const guessers = [...game.players.values()].filter((p) => !p.isDrawing);
     return guessers.every((p) => p.hasGuessed);
+  }
+
+  /** Remove a player from the game — returns info about what happened */
+  removePlayer(roomId: string, sessionId: string): {
+    wasDrawer: boolean;
+    playersLeft: number;
+  } | null {
+    const game = this.games.get(roomId);
+    if (!game) return null;
+
+    const player = game.players.get(sessionId);
+    if (!player) return null;
+
+    const wasDrawer = player.isDrawing;
+    game.players.delete(sessionId);
+    game.drawerOrder = game.drawerOrder.filter((id) => id !== sessionId);
+
+    // Adjust drawerIndex if removing someone before or at current index
+    if (game.drawerIndex >= game.drawerOrder.length) {
+      game.drawerIndex = Math.max(0, game.drawerOrder.length - 1);
+    }
+
+    return { wasDrawer, playersLeft: game.players.size };
+  }
+
+  /** Get current game state for reconnecting player */
+  getGameState(roomId: string, sessionId: string): {
+    phase: string;
+    round: number;
+    totalRounds: number;
+    drawerId: string;
+    drawerUsername: string;
+    isDrawer: boolean;
+    word: string;
+    hintPattern: string;
+    wordLength: number;
+    timeLimit: number;
+    elapsed: number;
+    strokes: DrawStroke[];
+    players: Array<{ sessionId: string; username: string; score: number; roundScore: number; hasGuessed: boolean; isDrawing: boolean }>;
+  } | null {
+    const game = this.games.get(roomId);
+    if (!game?.currentRound) return null;
+
+    const isDrawer = game.currentRound.drawerId === sessionId;
+    const elapsed = game.currentRound.startedAt > 0
+      ? Math.floor((Date.now() - game.currentRound.startedAt) / 1000)
+      : 0;
+
+    return {
+      phase: game.phase,
+      round: game.round,
+      totalRounds: game.totalRounds,
+      drawerId: game.currentRound.drawerId,
+      drawerUsername: game.currentRound.drawerUsername,
+      isDrawer,
+      word: isDrawer ? game.currentRound.word : '',
+      hintPattern: game.currentRound.hintPattern,
+      wordLength: game.currentRound.word.length,
+      timeLimit: game.currentRound.timeLimit,
+      elapsed,
+      strokes: game.currentRound.strokes,
+      players: [...game.players.values()].map((p) => ({
+        sessionId: p.sessionId,
+        username: p.username,
+        score: p.score,
+        roundScore: p.roundScore,
+        hasGuessed: p.hasGuessed,
+        isDrawing: p.isDrawing,
+      })),
+    };
   }
 }
