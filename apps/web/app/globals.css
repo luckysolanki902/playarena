@@ -1,48 +1,61 @@
 @import "tailwindcss";
 
-/* ─── Design Tokens ─── */
+/* ─── Cozy Game Palette ─── */
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #12121a;
-  --bg-tertiary: #1a1a28;
-  --bg-hover: #22223a;
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #1f2b47;
+  --bg-elevated: #253352;
+  --bg-hover: #2d3d60;
+  --bg-card: #1e2a45;
 
-  --text-primary: #f5f5f7;
-  --text-secondary: #a0a0b8;
-  --text-muted: #6b6b80;
+  --text-primary: #e8e6e3;
+  --text-secondary: #a8b4c8;
+  --text-muted: #6b7a94;
 
-  --border-default: #2a2a3e;
-  --border-focus: #7c3aed;
+  --border-default: #2a3654;
+  --border-subtle: #232e48;
+  --border-focus: #3d4f72;
 
-  --accent-purple: #7c3aed;
-  --accent-blue: #3b82f6;
-  --accent-green: #22c55e;
-  --accent-yellow: #eab308;
-  --accent-red: #ef4444;
-  --accent-orange: #f97316;
-  --accent-pink: #ec4899;
-  --accent-cyan: #06b6d4;
+  --wordle-correct: #538d4e;
+  --wordle-present: #b59f3b;
+  --wordle-absent: #3a3a4c;
+  --wordle-empty: #1e2a45;
 
-  --wordle-correct: #22c55e;
-  --wordle-present: #eab308;
-  --wordle-absent: #3a3a4e;
-  --wordle-empty: #1a1a28;
+  --accent-primary: #4ecdc4;
+  --accent-warm: #ffd166;
+  --accent-soft: #a78bfa;
+  --accent-error: #ef6461;
+  --accent-info: #74b9ff;
+  --accent-fun: #ff6b9d;
+
+  --glow-primary: rgba(78, 205, 196, 0.15);
+  --glow-warm: rgba(255, 209, 102, 0.15);
+  --glow-soft: rgba(167, 139, 250, 0.15);
 }
 
-/* ─── Base ─── */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Geist', 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* ─── Scrollbar ─── */
+::selection {
+  background: rgba(78, 205, 196, 0.3);
+  color: #fff;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-default);
@@ -50,4 +63,117 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* ─── Playful Animations ─── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(1deg); }
+  66% { transform: translateY(-4px) rotate(-1deg); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+.animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-wiggle { animation: wiggle 2s ease-in-out infinite; }
+.animate-slide-up { animation: slide-up 0.5s ease-out both; }
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-warm), var(--accent-fun), var(--accent-primary));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Playful card hover */
+.game-card {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.game-card:hover {
+  transform: translateY(-6px) scale(1.02);
+}
+.game-card:active {
+  transform: translateY(-2px) scale(0.99);
+}
+
+/* Blob decorations */
+.blob {
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  position: absolute;
+}
+
+/* Button pressed feel */
+.btn-game {
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+.btn-game:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.btn-game:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Loading spinner */
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.loading-spinner {
+  width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin-slow 0.8s linear infinite;
+}
+
+/* Stars background pattern */
+.stars-bg {
+  background-image: radial-gradient(1px 1px at 10% 20%, rgba(78,205,196,0.3) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 30% 60%, rgba(255,209,102,0.2) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 50% 30%, rgba(167,139,250,0.2) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 70% 80%, rgba(78,205,196,0.15) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 90% 45%, rgba(255,107,157,0.15) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 15% 85%, rgba(116,185,255,0.2) 0%, transparent 100%),
+                     radial-gradient(1.5px 1.5px at 45% 10%, rgba(78,205,196,0.25) 0%, transparent 100%),
+                     radial-gradient(1px 1px at 80% 15%, rgba(255,209,102,0.15) 0%, transparent 100%);
 }

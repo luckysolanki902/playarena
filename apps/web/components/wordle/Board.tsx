@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import type { LetterFeedback } from '@playarena/shared';
+import { motion } from "framer-motion";
+import type { LetterFeedback } from "@playarena/shared";
 
 interface TileProps {
   letter: string;
@@ -11,32 +11,40 @@ interface TileProps {
 }
 
 function Tile({ letter, feedback, delay = 0, active }: TileProps) {
-  const bgColor = feedback === 'correct'
-    ? 'var(--wordle-correct)'
-    : feedback === 'present'
-    ? 'var(--wordle-present)'
-    : feedback === 'absent'
-    ? 'var(--wordle-absent)'
-    : 'var(--wordle-empty)';
+  const bgColor = feedback === "correct"
+    ? "var(--wordle-correct)"
+    : feedback === "present"
+    ? "var(--wordle-present)"
+    : feedback === "absent"
+    ? "var(--wordle-absent)"
+    : "var(--wordle-empty)";
 
   const borderColor = active
-    ? 'var(--text-muted)'
+    ? "var(--accent-primary)"
     : feedback
-    ? 'transparent'
+    ? "transparent"
     : letter
-    ? 'var(--text-muted)'
-    : 'var(--border-default)';
+    ? "var(--border-focus)"
+    : "var(--border-default)";
+
+  const shadow = feedback === "correct"
+    ? "0 0 16px rgba(83, 141, 78, 0.25)"
+    : feedback === "present"
+    ? "0 0 16px rgba(181, 159, 59, 0.2)"
+    : "none";
 
   return (
     <motion.div
       initial={feedback ? { rotateX: 0 } : undefined}
       animate={feedback ? { rotateX: [0, 90, 0] } : letter ? { scale: [1, 1.08, 1] } : undefined}
-      transition={feedback ? { duration: 0.5, delay, times: [0, 0.5, 1] } : { duration: 0.1 }}
-      className="w-[58px] h-[58px] sm:w-[62px] sm:h-[62px] flex items-center justify-center text-2xl font-bold uppercase rounded-lg select-none"
+      transition={feedback ? { duration: 0.55, delay, times: [0, 0.5, 1], ease: "easeInOut" } : { duration: 0.1 }}
+      className="w-[54px] h-[54px] sm:w-[62px] sm:h-[62px] flex items-center justify-center text-xl sm:text-2xl font-black uppercase rounded-xl select-none"
       style={{
         background: bgColor,
-        border: `2px solid ${borderColor}`,
-        color: feedback ? '#fff' : 'var(--text-primary)',
+        border: `2.5px solid ${borderColor}`,
+        boxShadow: shadow,
+        color: feedback ? "#fff" : "var(--text-primary)",
+        letterSpacing: "0.04em",
       }}
     >
       {letter}
@@ -55,19 +63,16 @@ interface BoardProps {
 export default function WordleBoard({ guesses, currentGuess, maxAttempts, wordLength, shake }: BoardProps) {
   const rows: Array<{ word: string; feedback?: LetterFeedback[] }> = [];
 
-  // Completed guesses
   for (const g of guesses) {
     rows.push({ word: g.word, feedback: g.feedback });
   }
 
-  // Current guess row
   if (guesses.length < maxAttempts) {
-    rows.push({ word: currentGuess.padEnd(wordLength, ' ').slice(0, wordLength) });
+    rows.push({ word: currentGuess.padEnd(wordLength, " ").slice(0, wordLength) });
   }
 
-  // Empty rows
   while (rows.length < maxAttempts) {
-    rows.push({ word: ' '.repeat(wordLength) });
+    rows.push({ word: " ".repeat(wordLength) });
   }
 
   return (
@@ -78,10 +83,10 @@ export default function WordleBoard({ guesses, currentGuess, maxAttempts, wordLe
           <motion.div
             key={rowIdx}
             animate={shake && isCurrentRow ? { x: [0, -8, 8, -8, 8, 0] } : {}}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
             className="flex gap-[6px]"
           >
-            {row.word.split('').map((letter, colIdx) => (
+            {row.word.split("").map((letter, colIdx) => (
               <Tile
                 key={`${rowIdx}-${colIdx}`}
                 letter={letter.trim()}

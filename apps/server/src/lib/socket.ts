@@ -86,9 +86,15 @@ export function setupSocketIO(
     if (!payload) {
       return next(new Error('AUTH_FAILED'));
     }
-    const session = sessionStore.get(payload.sub);
-    if (!session) {
-      return next(new Error('AUTH_FAILED'));
+    if (!sessionStore.get(payload.sub)) {
+      // Session lost after server restart — recreate from valid JWT claims
+      const now = Date.now();
+      sessionStore.create({
+        sessionId: payload.sub,
+        username: payload.username,
+        createdAt: now,
+        lastSeenAt: now,
+      });
     }
     socket.data.sessionId = payload.sub;
     socket.data.username = payload.username;
@@ -118,27 +124,34 @@ export function setupSocketIO(
         socket.emit('lobby:error', { code: 'ROOM_IN_PROGRESS', message: 'Game already started' });
         return;
       }
-      if (room.players.length >= room.maxPlayers) {
-        socket.emit('lobby:error', { code: 'ROOM_FULL', message: 'Room is full' });
-        return;
-      }
 
-      const added = roomStore.addPlayer(room.id, {
-        sessionId,
-        username,
-        isHost: false,
-        joinedAt: Date.now(),
-      });
+      // Player might already be in the room (e.g., host who created it via REST)
+      const alreadyInRoom = room.players.some((p) => p.sessionId === sessionId);
 
-      if (!added) {
-        socket.emit('lobby:error', { code: 'ROOM_FULL', message: 'Could not join room' });
-        return;
+      if (!alreadyInRoom) {
+        if (room.players.length >= room.maxPlayers) {
+          socket.emit('lobby:error', { code: 'ROOM_FULL', message: 'Room is full' });
+          return;
+        }
+
+        const added = roomStore.addPlayer(room.id, {
+          sessionId,
+          username,
+          isHost: false,
+          joinedAt: Date.now(),
+        });
+
+        if (!added) {
+          socket.emit('lobby:error', { code: 'ROOM_FULL', message: 'Could not join room' });
+          return;
+        }
+
+        socket.to(room.id).emit('lobby:player-joined', { player: { sessionId, username, isHost: false, joinedAt: Date.now() } });
+        socket.to(room.id).emit('lobby:room-updated', { room: roomStore.get(room.id) });
       }
 
       socket.join(room.id);
       socket.emit('lobby:room-joined', { room: roomStore.get(room.id) });
-      socket.to(room.id).emit('lobby:player-joined', { player: { sessionId, username, isHost: false, joinedAt: Date.now() } });
-      socket.to(room.id).emit('lobby:room-updated', { room: roomStore.get(room.id) });
     });
 
     socket.on('lobby:leave-room', (data: { roomId: string }) => {

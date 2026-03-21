@@ -1,340 +1,351 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { useSessionStore } from '@/lib/store';
-import Link from 'next/link';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSessionStore } from "@/lib/store";
+import { sfx } from "@/lib/sounds";
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-interface PublicRoom {
-  id: string;
-  name: string;
-  hostUsername: string;
-  status: string;
-  players: number;
-  maxPlayers: number;
-}
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function WordleLobby() {
+  const router = useRouter();
   const { session, token } = useSessionStore();
-  const [rooms, setRooms] = useState<PublicRoom[]>([]);
-  const [roomName, setRoomName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [showJoin, setShowJoin] = useState(false);
-  const [error, setError] = useState('');
+  const [matching, setMatching] = useState(false);
+  const [showJoinInput, setShowJoinInput] = useState(false);
+  const [error, setError] = useState("");
 
-  const fetchRooms = async () => {
-    try {
-      const res = await fetch(`${API}/rooms?game=wordle`);
-      const data = await res.json();
-      setRooms(data.rooms || []);
-    } catch {
-      // ignore
-    }
-  };
-
-  // Fetch rooms on mount
-  useState(() => { fetchRooms(); });
-
-  const createRoom = async (visibility: 'public' | 'private') => {
+  const createRoom = async () => {
     if (!token) return;
     setCreating(true);
-    setError('');
+    setError("");
+    sfx.click();
     try {
       const res = await fetch(`${API}/rooms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          game: 'wordle',
-          name: roomName || `${session?.username}'s room`,
-          visibility,
+          game: "wordle",
+          name: `${session?.username}'s room`,
+          visibility: "private",
           maxPlayers: 4,
         }),
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.message || 'Failed to create room');
+        setError(data.message || "Could not create room");
+        sfx.fail();
         return;
       }
       const data = await res.json();
-      window.location.href = `/games/wordle/${data.id}`;
+      sfx.go();
+      router.push(`/games/wordle/${data.id}`);
     } catch {
-      setError('Network error');
+      setError("Connection error. Is the server running?");
+      sfx.fail();
     } finally {
       setCreating(false);
     }
   };
 
+  const playRandom = async () => {
+    if (!token) return;
+    setMatching(true);
+    setError("");
+    sfx.click();
+    try {
+      const res = await fetch(`${API}/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          game: "wordle",
+          name: `${session?.username}'s game`,
+          visibility: "public",
+          maxPlayers: 4,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.message || "Could not find a match");
+        sfx.fail();
+        return;
+      }
+      const data = await res.json();
+      sfx.go();
+      router.push(`/games/wordle/${data.id}`);
+    } catch {
+      setError("Connection error. Is the server running?");
+      sfx.fail();
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const joinByCode = () => {
+    if (joinCode.length < 4) return;
+    sfx.click();
+    router.push(`/games/wordle/${encodeURIComponent(joinCode)}`);
+  };
+
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="text-center">
-          <p className="text-lg mb-4" style={{ color: 'var(--text-secondary)' }}>
-            You need a username to play.
+      <div className="min-h-screen flex items-center justify-center stars-bg">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-3xl font-black"
+            style={{ background: "rgba(78,205,196,0.15)", color: "var(--accent-primary)" }}>
+            W
+          </div>
+          <p className="text-base font-semibold mb-4" style={{ color: "var(--text-secondary)" }}>
+            Pick a name first to play!
           </p>
           <Link
             href="/"
-            className="inline-block px-6 py-3 rounded-xl font-semibold text-white"
-            style={{ background: 'var(--accent-purple)' }}
+            className="btn-game inline-block px-6 py-3 rounded-2xl text-sm font-bold"
+            style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}
           >
-            ← Go back & pick a name
+            Go to home
           </Link>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+    <main className="min-h-screen flex flex-col relative stars-bg">
+      {/* Background blobs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="blob w-80 h-80 top-[-10%] right-[-5%] opacity-25" style={{ background: "var(--glow-primary)" }} />
+        <div className="blob w-60 h-60 bottom-[10%] left-[-5%] opacity-20" style={{ background: "var(--glow-warm)" }} />
+      </div>
+
       {/* Header */}
-      <nav className="fixed top-0 w-full z-50 border-b backdrop-blur-md"
-        style={{ borderColor: 'var(--border-default)', background: 'rgba(10,10,15,0.8)' }}>
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              ← Home
-            </Link>
-            <span style={{ color: 'var(--text-muted)' }}>/</span>
-            <span className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', system-ui" }}>
-              🔤 Wordle
-            </span>
-          </div>
+      <nav className="relative z-10 w-full px-6 py-4 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="max-w-lg mx-auto flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            onClick={() => sfx.click()}
+          >
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black"
+              style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
+              P
+            </div>
+            <span className="text-sm font-bold" style={{ color: "var(--text-muted)" }}>Home</span>
+          </Link>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-              style={{ background: 'var(--accent-purple)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black"
+              style={{ background: "rgba(78,205,196,0.15)", color: "var(--accent-primary)" }}>
+              W
+            </div>
+            <span className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>Wordle</span>
+          </div>
+          <div
+            className="flex items-center gap-2 px-2.5 py-1 rounded-full"
+            style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-default)" }}
+          >
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+              style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
               {session.username[0].toUpperCase()}
             </div>
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {session.username}
-            </span>
           </div>
         </div>
       </nav>
 
-      <div className="max-w-3xl mx-auto px-4 pt-24 pb-12">
-        {/* Actions */}
+      <div className="relative z-10 flex-1 flex flex-col items-center px-6 py-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8"
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full max-w-sm"
         >
-          <button
-            onClick={() => createRoom('public')}
-            disabled={creating}
-            className="h-14 rounded-xl font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97] cursor-pointer disabled:opacity-50"
-            style={{ background: 'var(--accent-purple)' }}
-          >
-            ⚡ Quick Match
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="h-14 rounded-xl font-semibold transition-all hover:brightness-110 active:scale-[0.97] cursor-pointer"
-            style={{
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-default)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            + Create Room
-          </button>
-          <button
-            onClick={() => setShowJoin(true)}
-            className="h-14 rounded-xl font-semibold transition-all hover:brightness-110 active:scale-[0.97] cursor-pointer"
-            style={{
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-default)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            🔗 Join Room
-          </button>
-        </motion.div>
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-extrabold mb-2" style={{ color: "var(--text-primary)" }}>
+              How do you want to play?
+            </h2>
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
+              Solo, random match, or with friends
+            </p>
+          </div>
 
-        {error && (
-          <p className="text-sm mb-4 text-center" style={{ color: 'var(--accent-red)' }}>{error}</p>
-        )}
-
-        {/* Create Room Modal */}
-        {showCreate && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-6 p-6 rounded-2xl border"
-            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-default)' }}
-          >
-            <h3 className="text-lg font-semibold mb-4">Create a Room</h3>
-            <input
-              type="text"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-              placeholder="Room name (optional)"
-              maxLength={32}
-              className="w-full h-11 px-4 rounded-xl text-base outline-none mb-3"
-              style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-default)',
-                color: 'var(--text-primary)',
-              }}
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => createRoom('public')}
-                disabled={creating}
-                className="flex-1 h-11 rounded-xl font-semibold text-white cursor-pointer"
-                style={{ background: 'var(--accent-purple)' }}
-              >
-                Public Room
-              </button>
-              <button
-                onClick={() => createRoom('private')}
-                disabled={creating}
-                className="flex-1 h-11 rounded-xl font-semibold text-white cursor-pointer"
-                style={{ background: 'var(--accent-blue)' }}
-              >
-                Private Room
-              </button>
-              <button
-                onClick={() => setShowCreate(false)}
-                className="h-11 px-4 rounded-xl cursor-pointer"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Join Room Modal */}
-        {showJoin && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-6 p-6 rounded-2xl border"
-            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-default)' }}
-          >
-            <h3 className="text-lg font-semibold mb-4">Join with Code</h3>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="Enter room code..."
-                maxLength={6}
-                className="flex-1 h-11 px-4 rounded-xl text-base outline-none uppercase tracking-widest text-center font-mono"
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-default)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <button
-                onClick={() => {
-                  if (joinCode.length === 6) {
-                    window.location.href = `/games/wordle/join?code=${joinCode}`;
-                  }
-                }}
-                className="h-11 px-6 rounded-xl font-semibold text-white cursor-pointer"
-                style={{ background: 'var(--accent-green)' }}
-              >
-                Join
-              </button>
-              <button
-                onClick={() => setShowJoin(false)}
-                className="h-11 px-4 rounded-xl cursor-pointer"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Solo Play */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-8 p-6 rounded-2xl border"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-default)' }}
-        >
-          <h3 className="text-lg font-semibold mb-2">🎯 Solo Play</h3>
-          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-            Practice on your own or challenge the bot.
-          </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3">
+            {/* Solo Play */}
             <Link
               href="/games/wordle/solo"
-              className="flex-1 h-11 rounded-xl font-semibold text-white flex items-center justify-center transition-all hover:brightness-110"
-              style={{ background: 'var(--accent-green)' }}
+              onClick={() => sfx.click()}
+              className="game-card group flex items-center gap-4 p-4 rounded-2xl border"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border-default)" }}
             >
-              Play Solo
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(78,205,196,0.12)" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Solo Practice</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Play at your own pace</p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
             </Link>
-          </div>
-        </motion.div>
 
-        {/* Public Rooms */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">🌐 Public Rooms</h3>
+            {/* Play Random */}
             <button
-              onClick={fetchRooms}
-              className="text-sm px-3 py-1 rounded-lg cursor-pointer"
-              style={{ color: 'var(--accent-purple)', background: 'var(--bg-tertiary)' }}
+              onClick={playRandom}
+              disabled={matching}
+              onMouseEnter={() => sfx.hover()}
+              className="game-card group flex items-center gap-4 p-4 rounded-2xl border text-left cursor-pointer disabled:cursor-wait"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border-default)" }}
             >
-              Refresh
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(255,209,102,0.12)" }}>
+                {matching ? (
+                  <div className="loading-spinner" style={{ borderTopColor: "var(--accent-warm)" }} />
+                ) : (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-warm)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+                  {matching ? "Finding players..." : "Quick Match"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Get matched with someone</p>
+              </div>
+              {!matching && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Create Private Room */}
+            <button
+              onClick={createRoom}
+              disabled={creating}
+              onMouseEnter={() => sfx.hover()}
+              className="game-card group flex items-center gap-4 p-4 rounded-2xl border text-left cursor-pointer disabled:cursor-wait"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border-default)" }}
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(167,139,250,0.12)" }}>
+                {creating ? (
+                  <div className="loading-spinner" style={{ borderTopColor: "var(--accent-soft)" }} />
+                ) : (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-soft)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+                  {creating ? "Creating room..." : "Create Room"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Invite friends with a code</p>
+              </div>
+              {!creating && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Join with Code */}
+            <button
+              onClick={() => { setShowJoinInput(!showJoinInput); sfx.click(); }}
+              onMouseEnter={() => sfx.hover()}
+              className="game-card group flex items-center gap-4 p-4 rounded-2xl border text-left cursor-pointer"
+              style={{
+                background: "var(--bg-card)",
+                borderColor: showJoinInput ? "var(--accent-info)" : "var(--border-default)",
+              }}
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(116,185,255,0.12)" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-info)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Join Room</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Enter a friend's room code</p>
+              </div>
+              <motion.svg
+                animate={{ rotate: showJoinInput ? 90 : 0 }}
+                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </motion.svg>
             </button>
           </div>
-          {rooms.length === 0 ? (
-            <div
-              className="text-center py-12 rounded-2xl border"
-              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-default)' }}
-            >
-              <p className="text-3xl mb-3">🎮</p>
-              <p style={{ color: 'var(--text-muted)' }}>No public rooms yet. Create one!</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {rooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="flex items-center justify-between p-4 rounded-xl border transition-all hover:border-purple-500/30 cursor-pointer"
-                  style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-default)' }}
-                  onClick={() => { window.location.href = `/games/wordle/${room.id}`; }}
-                >
-                  <div>
-                    <p className="font-medium">{room.name}</p>
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                      Host: {room.hostUsername}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm px-2 py-1 rounded-lg"
-                      style={{
-                        background: room.status === 'waiting' ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
-                        color: room.status === 'waiting' ? 'var(--accent-green)' : 'var(--accent-yellow)',
-                      }}>
-                      {room.status === 'waiting' ? 'Waiting' : 'In Game'}
-                    </span>
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      {room.players}/{room.maxPlayers}
-                    </span>
-                  </div>
+
+          {/* Join Code Input */}
+          <AnimatePresence>
+            {showJoinInput && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex gap-2 mt-3 px-1">
+                  <input
+                    type="text"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    placeholder="Room code"
+                    maxLength={8}
+                    className="flex-1 h-12 px-4 rounded-xl text-sm font-bold outline-none uppercase tracking-[0.15em] text-center"
+                    style={{
+                      background: "var(--bg-tertiary)",
+                      border: "1px solid var(--border-default)",
+                      color: "var(--text-primary)",
+                    }}
+                    autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && joinByCode()}
+                  />
+                  <button
+                    onClick={joinByCode}
+                    disabled={joinCode.length < 4}
+                    className="btn-game h-12 px-5 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-30"
+                    style={{ background: "var(--accent-info)", color: "var(--bg-primary)" }}
+                  >
+                    Join
+                  </button>
                 </div>
-              ))}
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mt-4 p-3 rounded-xl text-center text-sm font-medium"
+                style={{ background: "rgba(239,100,97,0.1)", color: "var(--accent-error)", border: "1px solid rgba(239,100,97,0.2)" }}
+              >
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
+
+      <footer className="relative z-10 py-4 text-center">
+        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+          Made with care by <span style={{ color: "var(--accent-warm)" }}>Dharaa Singh</span>
+        </p>
+      </footer>
     </main>
   );
 }

@@ -41,9 +41,17 @@ export async function roomRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'AUTH_FAILED' });
     }
 
-    const session = app.sessionStore.get(payload.sub);
+    let session = app.sessionStore.get(payload.sub);
     if (!session) {
-      return reply.status(401).send({ error: 'AUTH_FAILED' });
+      // Session lost after server restart — recreate from valid JWT claims
+      const now = Date.now();
+      app.sessionStore.create({
+        sessionId: payload.sub,
+        username: payload.username,
+        createdAt: now,
+        lastSeenAt: now,
+      });
+      session = app.sessionStore.get(payload.sub)!;
     }
 
     const { game, name, visibility, maxPlayers } = request.body ?? {};
