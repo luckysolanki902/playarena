@@ -3,16 +3,18 @@ import { verifyToken } from './auth';
 import type { SessionStore } from './sessionStore';
 import type { RoomStore } from './roomStore';
 import { sanitizeText, validateChatMessage } from '@playarena/shared';
-import type { DrawPoint } from '@playarena/shared';
+import type { DrawPoint, Direction } from '@playarena/shared';
 import { WordleEngine } from '../engine/wordle';
 import { ScribbleEngine } from '../engine/scribble';
 import { TypeRushEngine } from '../engine/typerush';
 import { PulseGridEngine } from '../engine/pulsegrid';
+import { NeonDriftEngine } from '../engine/neondrift';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
 const typeRushEngine = new TypeRushEngine();
 const pulseGridEngine = new PulseGridEngine();
+const neonDriftEngine = new NeonDriftEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -259,6 +261,93 @@ function handlePulseGridRoundEnd(io: SocketIOServer, roomId: string, roomStore: 
   }
 }
 
+// ─── NeonDrift helpers ───
+
+function startNeonDriftRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
+  const roundData = neonDriftEngine.startRound(roomId, players);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = neonDriftEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('neondrift:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    neonDriftEngine.removeGame(roomId);
+    return;
+  }
+
+  io.to(roomId).emit('neondrift:round-start', {
+    round: roundData.round,
+    totalRounds: roundData.totalRounds,
+    gridWidth: roundData.gridWidth,
+    gridHeight: roundData.gridHeight,
+    players: roundData.players,
+    tickRate: roundData.tickRate,
+    countdownSeconds: roundData.countdownSeconds,
+  });
+
+  // Round countdown before starting
+  let countdown = 3;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    if (countdown > 0) {
+      io.to(roomId).emit('neondrift:countdown', { seconds: countdown });
+    } else {
+      clearInterval(countdownInterval);
+      neonDriftEngine.markRoundActive(roomId);
+      io.to(roomId).emit('neondrift:go', {});
+      // Start game tick
+      neonDriftEngine.startTick(roomId, () => {
+        const tickResult = neonDriftEngine.tick(roomId);
+        if (!tickResult) return;
+
+        io.to(roomId).emit('neondrift:tick', {
+          players: tickResult.players,
+          tick: tickResult.tick,
+        });
+
+        // Notify crashes
+        for (const crash of tickResult.crashed) {
+          const game = neonDriftEngine.getGame(roomId);
+          const player = game?.currentRound?.players[crash.sessionId];
+          io.to(roomId).emit('neondrift:player-crashed', {
+            sessionId: crash.sessionId,
+            username: player?.username ?? 'Unknown',
+            position: crash.position,
+          });
+        }
+
+        if (tickResult.roundOver) {
+          handleNeonDriftRoundEnd(io, roomId, roomStore);
+        }
+      });
+    }
+  }, 1000);
+}
+
+function handleNeonDriftRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  neonDriftEngine.stopTick(roomId);
+  const result = neonDriftEngine.endRound(roomId);
+  if (!result) return;
+
+  io.to(roomId).emit('neondrift:round-end', {
+    rankings: result.rankings,
+    nextRoundIn: result.isGameOver ? 0 : 5,
+  });
+
+  if (result.isGameOver) {
+    const finalRankings = neonDriftEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('neondrift:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    neonDriftEngine.removeGame(roomId);
+  } else {
+    setTimeout(() => startNeonDriftRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -294,6 +383,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startPulseGridRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'neondrift') {
+    neonDriftEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startNeonDriftRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -677,6 +772,12 @@ export function setupSocketIO(
       if (scores) {
         io.to(data.roomId).emit('pulsegrid:score-update', { scores });
       }
+    });
+
+    // ─── NeonDrift Game Events ───
+
+    socket.on('neondrift:turn', (data: { roomId: string; direction: Direction }) => {
+      neonDriftEngine.turn(data.roomId, sessionId, data.direction);
     });
 
     // ─── Chat Events ───

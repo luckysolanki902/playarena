@@ -89,7 +89,7 @@ const GAMES: Game[] = [
     color: "#f472b6",
     bgGlow: "rgba(244, 114, 182, 0.12)",
     letter: "N",
-    ready: false,
+    ready: true,
     category: "action",
   },
   {

@@ -3,5 +3,6 @@ export * from './types/wordle';
 export * from './types/scribble';
 export * from './types/typerush';
 export * from './types/pulsegrid';
+export * from './types/neondrift';
 export * from './types/events';
 export * from './utils/validation';
