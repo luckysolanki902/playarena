@@ -4,6 +4,7 @@ import { generateId, generateRoomCode } from '@playarena/shared';
 export class RoomStore {
   private rooms = new Map<string, Room>();
   private codeIndex = new Map<string, string>(); // code → roomId
+  private pendingDeletion = new Map<string, ReturnType<typeof setTimeout>>();
 
   create(opts: {
     game: Room['game'];
@@ -67,6 +68,9 @@ export class RoomStore {
     if (room.players.length >= room.maxPlayers) return false;
     if (room.status !== 'waiting') return false;
     if (room.players.some((p) => p.sessionId === player.sessionId)) return false;
+    // Cancel any scheduled deletion when a player joins
+    const pending = this.pendingDeletion.get(roomId);
+    if (pending) { clearTimeout(pending); this.pendingDeletion.delete(roomId); }
     room.players.push(player);
     return true;
   }
@@ -78,10 +82,17 @@ export class RoomStore {
     if (idx === -1) return false;
     room.players.splice(idx, 1);
 
-    // If room is empty, delete it
+    // If room is empty, schedule deletion after 30s (grace period for reconnects)
     if (room.players.length === 0) {
-      if (room.code) this.codeIndex.delete(room.code);
-      this.rooms.delete(roomId);
+      const timer = setTimeout(() => {
+        const r = this.rooms.get(roomId);
+        if (r && r.players.length === 0) {
+          if (r.code) this.codeIndex.delete(r.code);
+          this.rooms.delete(roomId);
+        }
+        this.pendingDeletion.delete(roomId);
+      }, 30_000);
+      this.pendingDeletion.set(roomId, timer);
       return true;
     }
 
@@ -101,6 +112,8 @@ export class RoomStore {
   delete(roomId: string): void {
     const room = this.rooms.get(roomId);
     if (room) {
+      const pending = this.pendingDeletion.get(roomId);
+      if (pending) { clearTimeout(pending); this.pendingDeletion.delete(roomId); }
       if (room.code) this.codeIndex.delete(room.code);
       this.rooms.delete(roomId);
     }

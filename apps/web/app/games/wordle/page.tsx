@@ -57,6 +57,23 @@ export default function WordleLobby() {
     setError("");
     sfx.click();
     try {
+      // First: find an existing public room with space (fill up before creating new)
+      const listRes = await fetch(`${API}/rooms?game=wordle`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        type RoomItem = { id: string; status: string; players: number; maxPlayers: number };
+        const available = (listData.rooms as RoomItem[])
+          .filter((r) => r.status === "waiting" && r.players >= 1 && r.players < Math.min(r.maxPlayers, 6))
+          .sort((a, b) => b.players - a.players); // most populated first
+        if (available.length > 0) {
+          sfx.go();
+          router.push(`/games/wordle/${available[0].id}`);
+          return;
+        }
+      }
+      // No existing room — create a new public room (max 6 for quick match)
       const res = await fetch(`${API}/rooms`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -64,7 +81,7 @@ export default function WordleLobby() {
           game: "wordle",
           name: `${session?.username}'s game`,
           visibility: "public",
-          maxPlayers: 4,
+          maxPlayers: 6,
         }),
       });
       if (!res.ok) {

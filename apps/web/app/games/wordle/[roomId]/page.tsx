@@ -319,10 +319,10 @@ export default function MultiplayerWordlePage() {
                 ))}
               </div>
               {isHost ? (
-                <button onClick={startGame} disabled={players.length < 1}
+                <button onClick={startGame} disabled={players.length < 2}
                   className="btn-game px-8 py-3 rounded-2xl font-bold text-sm text-white cursor-pointer disabled:opacity-40"
                   style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
-                  Start Game
+                  {players.length < 2 ? "Waiting for players..." : "Start Game"}
                 </button>
               ) : (
                 <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Waiting for the host to start...</p>

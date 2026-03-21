@@ -151,12 +151,14 @@ export function setupSocketIO(
       }
 
       socket.join(room.id);
+      socket.data.currentRoomId = room.id;
       socket.emit('lobby:room-joined', { room: roomStore.get(room.id) });
     });
 
     socket.on('lobby:leave-room', (data: { roomId: string }) => {
       roomStore.removePlayer(data.roomId, sessionId);
       socket.leave(data.roomId);
+      socket.data.currentRoomId = undefined;
       socket.to(data.roomId).emit('lobby:player-left', { sessionId, username });
       const updated = roomStore.get(data.roomId);
       if (updated) {
@@ -171,8 +173,8 @@ export function setupSocketIO(
         socket.emit('lobby:error', { code: 'NOT_HOST', message: 'Only the host can start' });
         return;
       }
-      if (room.players.length < 1) {
-        socket.emit('lobby:error', { code: 'INVALID_INPUT', message: 'Need at least 1 player' });
+      if (room.players.length < 2) {
+        socket.emit('lobby:error', { code: 'INVALID_INPUT', message: 'Need at least 2 players to start' });
         return;
       }
 
@@ -273,6 +275,16 @@ export function setupSocketIO(
 
     socket.on('disconnect', () => {
       sessionStore.touch(sessionId);
+      // Remove player from their room on disconnect and notify others
+      const currentRoomId = socket.data.currentRoomId as string | undefined;
+      if (currentRoomId) {
+        roomStore.removePlayer(currentRoomId, sessionId);
+        socket.to(currentRoomId).emit('lobby:player-left', { sessionId, username });
+        const updated = roomStore.get(currentRoomId);
+        if (updated) {
+          socket.to(currentRoomId).emit('lobby:room-updated', { room: updated });
+        }
+      }
     });
   });
 }
