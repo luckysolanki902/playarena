@@ -11,6 +11,7 @@ import { PulseGridEngine } from '../engine/pulsegrid';
 import { NeonDriftEngine } from '../engine/neondrift';
 import { VoidfallEngine } from '../engine/voidfall';
 import { SyncShotEngine } from '../engine/syncshot';
+import { GlitchArenaEngine } from '../engine/glitcharena';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
@@ -19,6 +20,7 @@ const pulseGridEngine = new PulseGridEngine();
 const neonDriftEngine = new NeonDriftEngine();
 const voidfallEngine = new VoidfallEngine();
 const syncShotEngine = new SyncShotEngine();
+const glitchArenaEngine = new GlitchArenaEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -533,6 +535,100 @@ function handleSyncShotRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
+// ─── GlitchArena helpers ───
+
+function startGlitchArenaRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const roundData = glitchArenaEngine.startRound(roomId);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = glitchArenaEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('glitcharena:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    glitchArenaEngine.cleanup(roomId);
+    return;
+  }
+
+  const game = glitchArenaEngine.getGameState(roomId);
+  if (!game) return;
+
+  io.to(roomId).emit('glitcharena:round-start', {
+    roundNumber: game.currentRound,
+    players: roundData.players,
+    settings: game.settings,
+    roundDuration: game.settings.roundDuration,
+  });
+
+  // Countdown before starting
+  let countdown = 3;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    io.to(roomId).emit('game:countdown', { count: countdown });
+    if (countdown <= 0) {
+      clearInterval(countdownInterval);
+      glitchArenaEngine.markRoundActive(roomId);
+      
+      // Start tick loop
+      glitchArenaEngine.startTick(roomId, (result) => {
+        if (!result) return;
+
+        io.to(roomId).emit('glitcharena:tick', {
+          players: result.state.players,
+          buttons: result.state.buttons,
+          activeEffects: result.state.activeEffects,
+          timeRemaining: result.timeRemaining,
+        });
+
+        // Notify expired buttons
+        for (const buttonId of result.expiredButtons) {
+          io.to(roomId).emit('glitcharena:button-expired', { buttonId });
+        }
+
+        // Notify glitch effects
+        if (result.randomGlitch) {
+          io.to(roomId).emit('glitcharena:glitch', { effect: result.randomGlitch });
+        }
+
+        if (result.roundOver) {
+          handleGlitchArenaRoundEnd(io, roomId, roomStore);
+        }
+      });
+
+      // Start spawning buttons
+      glitchArenaEngine.startSpawning(roomId, (button) => {
+        io.to(roomId).emit('glitcharena:button-spawn', { button });
+      });
+    }
+  }, 1000);
+}
+
+function handleGlitchArenaRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  glitchArenaEngine.stopTick(roomId);
+  glitchArenaEngine.stopSpawning(roomId);
+  const result = glitchArenaEngine.endRound(roomId);
+  if (!result) return;
+
+  const isGameOver = glitchArenaEngine.isGameOver(roomId);
+  const finalResults = isGameOver ? glitchArenaEngine.getFinalRankings(roomId) : undefined;
+
+  io.to(roomId).emit('glitcharena:round-end', {
+    roundNumber: glitchArenaEngine.getGameState(roomId)?.currentRound ?? 0,
+    results: result,
+    isGameOver,
+    finalResults,
+  });
+
+  if (isGameOver) {
+    roomStore.setStatus(roomId, 'finished');
+    glitchArenaEngine.cleanup(roomId);
+  } else {
+    setTimeout(() => startGlitchArenaRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -586,6 +682,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startSyncShotRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'glitcharena') {
+    glitchArenaEngine.createGame(roomId, players.map(p => ({ oddsId: p.sessionId, oddsName: p.username })));
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startGlitchArenaRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -1008,6 +1110,32 @@ export function setupSocketIO(
       } else {
         socket.emit('syncshot:miss', { playerId: sessionId, position: data.position });
       }
+    });
+
+    // ─── GlitchArena Game Events ───
+
+    socket.on('glitcharena:click', (data: { roomId: string; buttonId: string }) => {
+      const result = glitchArenaEngine.clickButton(data.roomId, sessionId, data.buttonId);
+      if (!result) return;
+
+      if (result.hit && result.button) {
+        io.to(data.roomId).emit('glitcharena:button-hit', {
+          buttonId: result.button.id,
+          hitBy: sessionId,
+          points: result.points ?? 0,
+          comboBonus: result.comboBonus ?? 0,
+          newCombo: result.newCombo ?? 0,
+        });
+
+        // Broadcast glitch effect if triggered
+        if (result.glitchEffect) {
+          io.to(data.roomId).emit('glitcharena:glitch', { effect: result.glitchEffect });
+        }
+      }
+    });
+
+    socket.on('glitcharena:move', (data: { roomId: string; position: { x: number; y: number } }) => {
+      glitchArenaEngine.updateCursorPosition(data.roomId, sessionId, data.position);
     });
 
     // ─── Chat Events ───
