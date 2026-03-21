@@ -1,4 +1,4 @@
-export type DrawEventType = 'start' | 'draw' | 'end' | 'shape';
+export type DrawEventType = 'start' | 'draw' | 'end' | 'shape' | 'fill';
 
 export interface DrawPoint {
   x: number; // normalized 0–1
@@ -7,7 +7,7 @@ export interface DrawPoint {
   color: string;
   width: number;
   // Shape fields (present when type === 'shape')
-  shape?: 'line' | 'rect' | 'circle';
+  shape?: 'line' | 'rect' | 'circle' | 'triangle';
   x2?: number; // end x, normalized 0–1
   y2?: number; // end y, normalized 0–1
 }

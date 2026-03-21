@@ -16,7 +16,7 @@ const WIDTHS = [
 ];
 
 const CANVAS_BG = "#f8f5f0";
-type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle' | 'triangle' | 'fill';
 
 interface Props {
   isDrawer: boolean;
@@ -104,7 +104,71 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
       ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
       ctx.stroke();
+    } else if (pt.shape === 'triangle') {
+      const midX = (x1 + x2) / 2;
+      ctx.moveTo(midX, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineTo(x1, y2);
+      ctx.closePath();
+      ctx.stroke();
     }
+  }, []);
+
+  // Flood fill (bucket tool)
+  const floodFill = useCallback((ctx: CanvasRenderingContext2D, startX: number, startY: number, fillColor: string) => {
+    const canvas = ctx.canvas;
+    const W = canvas.width, H = canvas.height;
+    const px = Math.round(startX * W), py = Math.round(startY * H);
+    if (px < 0 || px >= W || py < 0 || py >= H) return;
+
+    const imageData = ctx.getImageData(0, 0, W, H);
+    const data = imageData.data;
+
+    // Parse fill color
+    const tmp = document.createElement('canvas');
+    tmp.width = tmp.height = 1;
+    const tmpCtx = tmp.getContext('2d')!;
+    tmpCtx.fillStyle = fillColor;
+    tmpCtx.fillRect(0, 0, 1, 1);
+    const [fr, fg, fb] = tmpCtx.getImageData(0, 0, 1, 1).data;
+
+    const idx = (py * W + px) * 4;
+    const tr = data[idx], tg = data[idx + 1], tb = data[idx + 2], ta = data[idx + 3];
+
+    // Don't fill if target === fill color
+    if (tr === fr && tg === fg && tb === fb) return;
+
+    const tolerance = 32;
+    const match = (i: number) =>
+      Math.abs(data[i] - tr) <= tolerance &&
+      Math.abs(data[i + 1] - tg) <= tolerance &&
+      Math.abs(data[i + 2] - tb) <= tolerance &&
+      Math.abs(data[i + 3] - ta) <= tolerance;
+
+    const stack = [px, py];
+    const visited = new Uint8Array(W * H);
+
+    while (stack.length > 0) {
+      const cy = stack.pop()!;
+      const cx = stack.pop()!;
+      const ci = (cy * W + cx) * 4;
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+      if (visited[cy * W + cx]) continue;
+      if (!match(ci)) continue;
+
+      visited[cy * W + cx] = 1;
+      data[ci] = fr;
+      data[ci + 1] = fg;
+      data[ci + 2] = fb;
+      data[ci + 3] = 255;
+
+      stack.push(cx + 1, cy);
+      stack.push(cx - 1, cy);
+      stack.push(cx, cy + 1);
+      stack.push(cx, cy - 1);
+    }
+
+    ctx.putImageData(imageData, 0, 0);
   }, []);
 
   // Replay all strokes (used when strokes prop changes)
@@ -121,7 +185,9 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       for (const stroke of stks) {
         let prev: DrawPoint | null = null;
         for (const pt of stroke.points) {
-          if (pt.type === "shape") {
+          if (pt.type === "fill") {
+            floodFill(ctx, pt.x, pt.y, pt.color);
+          } else if (pt.type === "shape") {
             drawShape(ctx, pt);
           } else if (pt.type === "start") {
             drawDot(ctx, pt.x, pt.y, pt.color, pt.width);
@@ -132,7 +198,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
         }
       }
     },
-    [drawSegment, drawDot, drawShape],
+    [drawSegment, drawDot, drawShape, floodFill],
   );
 
   // Init canvas with white background
@@ -174,7 +240,9 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
 
     let prev: DrawPoint | null = lastRemotePoint.current;
     for (const pt of remotePoints) {
-      if (pt.type === "shape") {
+      if (pt.type === "fill") {
+        floodFill(ctx, pt.x, pt.y, pt.color);
+      } else if (pt.type === "shape") {
         drawShape(ctx, pt);
       } else if (pt.type === "start") {
         drawDot(ctx, pt.x, pt.y, pt.color, pt.width);
@@ -184,7 +252,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       prev = pt;
     }
     lastRemotePoint.current = prev;
-  }, [remotePoints, drawSegment, drawDot, drawShape]);
+  }, [remotePoints, drawSegment, drawDot, drawShape, floodFill]);
 
   // Flush queued points to server every 40ms
   useEffect(() => {
@@ -238,7 +306,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
         const ctx = canvas?.getContext("2d");
         if (!canvas || !ctx || !shapeStartPos.current || !canvasSnapshot.current) return;
         ctx.putImageData(canvasSnapshot.current, 0, 0);
-        drawShape(ctx, { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' });
+        drawShape(ctx, { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' });
       }
     },
     [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawSegment, drawShape, tool],
@@ -252,7 +320,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       if (tool === 'pen' || tool === 'eraser') {
         if (pos) pendingPoints.current.push({ ...pos, type: "end", color: effectiveColor, width: effectiveWidth });
       } else if (pos && shapeStartPos.current) {
-        const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' };
+        const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' };
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) { if (canvasSnapshot.current) ctx.putImageData(canvasSnapshot.current, 0, 0); drawShape(ctx, shapePt); }
         onDraw([shapePt]);
@@ -272,7 +340,15 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       const pos = normalize(e.touches[0]);
       if (!pos) return;
       lastPos.current = pos;
-      if (tool === 'pen' || tool === 'eraser') {
+      if (tool === 'fill') {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (ctx) {
+          floodFill(ctx, pos.x, pos.y, effectiveColor);
+          const fillPt: DrawPoint = { x: pos.x, y: pos.y, type: "fill", color: effectiveColor, width: effectiveWidth };
+          onDraw([fillPt]);
+        }
+        isDrawing.current = false;
+      } else if (tool === 'pen' || tool === 'eraser') {
         const pt: DrawPoint = { ...pos, type: "start", color: effectiveColor, width: effectiveWidth };
         pendingPoints.current.push(pt);
         const ctx = canvasRef.current?.getContext("2d");
@@ -284,7 +360,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
         if (canvas && ctx) canvasSnapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
       }
     },
-    [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawDot, tool],
+    [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawDot, tool, floodFill, onDraw],
   );
 
   const handleTouchMove = useCallback(
@@ -305,7 +381,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
         const ctx = canvas?.getContext("2d");
         if (!canvas || !ctx || !shapeStartPos.current || !canvasSnapshot.current) return;
         ctx.putImageData(canvasSnapshot.current, 0, 0);
-        drawShape(ctx, { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' });
+        drawShape(ctx, { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' });
       }
     },
     [isDrawer, active, normalize, effectiveColor, effectiveWidth, drawSegment, drawShape, tool],
@@ -317,7 +393,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
     if (tool === 'pen' || tool === 'eraser') {
       if (lastPos.current) pendingPoints.current.push({ x: lastPos.current.x, y: lastPos.current.y, type: "end", color: effectiveColor, width: effectiveWidth });
     } else if (lastPos.current && shapeStartPos.current) {
-      const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: lastPos.current.x, y2: lastPos.current.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' };
+      const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: lastPos.current.x, y2: lastPos.current.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' };
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) { if (canvasSnapshot.current) ctx.putImageData(canvasSnapshot.current, 0, 0); drawShape(ctx, shapePt); }
       onDraw([shapePt]);
@@ -347,7 +423,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
           background: "#f8f5f0",
           border: isDrawer && active ? "2px solid var(--accent-warm)" : "2px solid var(--border-subtle)",
           boxShadow: isDrawer && active ? "0 0 0 4px rgba(255,209,102,0.1)" : "none",
-          cursor: isDrawer && active ? (tool === 'eraser' ? "cell" : "crosshair") : "default",
+          cursor: isDrawer && active ? (tool === 'eraser' ? "cell" : tool === 'fill' ? "crosshair" : "crosshair") : "default",
           minHeight: 340,
         }}>
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full touch-none"
@@ -374,6 +450,8 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
               { id: 'line' as Tool, icon: '╱', title: 'Line' },
               { id: 'rect' as Tool, icon: '▭', title: 'Rectangle' },
               { id: 'circle' as Tool, icon: '◯', title: 'Circle' },
+              { id: 'triangle' as Tool, icon: '△', title: 'Triangle' },
+              { id: 'fill' as Tool, icon: '🪣', title: 'Fill Bucket' },
             ]).map((t) => (
               <button key={t.id} onClick={() => setTool(t.id)}
                 className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-all"
