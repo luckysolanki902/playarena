@@ -32,6 +32,7 @@ export default function ScribbleRoom() {
 
   const [phase, setPhase] = useState<Phase>("lobby");
   const [players, setPlayers] = useState<Player[]>([]);
+  const playersRef = useRef<Player[]>([]);
   const [gamePlayers, setGamePlayers] = useState<ScribblePlayer[]>([]);
   const [countdown, setCountdown] = useState(3);
   const [round, setRound] = useState(1);
@@ -82,13 +83,13 @@ export default function ScribbleRoom() {
 
     socket.emit("lobby:join-room", { roomId });
 
-    socket.on("lobby:room-joined", ({ room }) => { setPlayers(room.players); sfx.join(); });
+    socket.on("lobby:room-joined", ({ room }) => { setPlayers(room.players); playersRef.current = room.players; sfx.join(); });
     socket.on("lobby:player-joined", ({ player }) => {
-      setPlayers((prev) => [...prev.filter((p) => p.sessionId !== player.sessionId), player]);
+      setPlayers((prev) => { const next = [...prev.filter((p) => p.sessionId !== player.sessionId), player]; playersRef.current = next; return next; });
       sfx.join();
     });
-    socket.on("lobby:player-left", ({ sessionId: sid }) => setPlayers((prev) => prev.filter((p) => p.sessionId !== sid)));
-    socket.on("lobby:room-updated", ({ room }) => setPlayers(room.players));
+    socket.on("lobby:player-left", ({ sessionId: sid }) => setPlayers((prev) => { const next = prev.filter((p) => p.sessionId !== sid); playersRef.current = next; return next; }));
+    socket.on("lobby:room-updated", ({ room }) => { setPlayers(room.players); playersRef.current = room.players; });
 
     socket.on("lobby:game-starting", ({ countdown: c }) => {
       setPhase("countdown");
@@ -110,6 +111,16 @@ export default function ScribbleRoom() {
       setMyWord(""); setHintPattern(""); setWordChoices([]); setStrokes([]); setRemotePoints([]);
       setCanvasActive(false); setHasGuessedCorrectly(false);
       if (timerRef.current) clearInterval(timerRef.current);
+      // Initialize or reset scoreboard
+      setGamePlayers((prev) => {
+        if (prev.length === 0) {
+          return playersRef.current.map((p) => ({
+            sessionId: p.sessionId, username: p.username, score: 0, roundScore: 0,
+            hasGuessed: false, isDrawing: p.sessionId === drawerId,
+          }));
+        }
+        return prev.map((p) => ({ ...p, roundScore: 0, hasGuessed: false, isDrawing: p.sessionId === drawerId }));
+      });
     });
 
     // Word choices only reach the drawer socket (server sends to room but client filters)
@@ -152,10 +163,14 @@ export default function ScribbleRoom() {
     });
 
     socket.on("scribble:player-guessed", ({ sessionId: sid, username: uname, points: pts, guessedCount }: { sessionId: string; username: string; points: number; guessedCount: number }) => {
-      setGamePlayers((prev) => prev.map((p) => p.sessionId === sid ? { ...p, hasGuessed: true, roundScore: (p.roundScore ?? 0) + pts, score: p.score + pts } : p));
+      setGamePlayers((prev) => prev.map((p) => {
+        if (p.sessionId === sid) return { ...p, hasGuessed: true, score: p.score + pts, roundScore: (p.roundScore ?? 0) + pts };
+        if (p.isDrawing) return { ...p, score: p.score + 15, roundScore: (p.roundScore ?? 0) + 15 };
+        return p;
+      }));
       setMessages((prev) => [...prev, { username: uname, text: `guessed the word! +${pts}`, type: "correct" as const, timestamp: Date.now() }]);
       sfx.correct();
-      void guessedCount; // used server-side
+      void guessedCount;
     });
 
     socket.on("scribble:correct-guess", ({ points: pts }: { points: number }) => {
@@ -176,6 +191,8 @@ export default function ScribbleRoom() {
 
     socket.on("scribble:round-end", ({ word, rankings, nextRoundIn }: { word: string; rankings: Array<{ sessionId: string; username: string; score: number; roundScore: number }>; nextRoundIn: number }) => {
       setPhase("round-end"); setRoundWord(word); setRoundRankings(rankings);
+      // Sync live scoreboard from authoritative server rankings
+      setGamePlayers(rankings.map((r) => ({ ...r, hasGuessed: true, isDrawing: false })));
       setCanvasActive(false);
       if (timerRef.current) clearInterval(timerRef.current);
       void nextRoundIn;

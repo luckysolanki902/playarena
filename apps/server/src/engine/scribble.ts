@@ -244,6 +244,10 @@ export class ScribbleEngine {
         game.currentRound.strokes.push({ points: [...game.currentRound.currentStroke] });
       }
       game.currentRound.currentStroke = [];
+    } else if (point.type === 'shape') {
+      // Shape committed in one shot — store as its own single-point stroke
+      game.currentRound.strokes.push({ points: [point] });
+      game.currentRound.currentStroke = [];
     }
     return true;
   }
