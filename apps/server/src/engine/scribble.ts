@@ -22,6 +22,7 @@ interface RoundState {
   startedAt: number;
   strokes: DrawStroke[];     // full history for late-joiner replay
   currentStroke: DrawPoint[];
+  redoStack: DrawStroke[];    // undone strokes for redo
   guessedOrder: string[];    // sessionIds in order of correct guess
 }
 
@@ -147,6 +148,7 @@ export class ScribbleEngine {
       startedAt: 0,
       strokes: [],
       currentStroke: [],
+      redoStack: [],
       guessedOrder: [],
     };
 
@@ -242,16 +244,19 @@ export class ScribbleEngine {
       game.currentRound.currentStroke.push(point);
       if (game.currentRound.currentStroke.length > 0) {
         game.currentRound.strokes.push({ points: [...game.currentRound.currentStroke] });
+        game.currentRound.redoStack = [];
       }
       game.currentRound.currentStroke = [];
     } else if (point.type === 'shape') {
       // Shape committed in one shot — store as its own single-point stroke
       game.currentRound.strokes.push({ points: [point] });
       game.currentRound.currentStroke = [];
+      game.currentRound.redoStack = [];
     } else if (point.type === 'fill') {
       // Fill committed in one shot — store as its own single-point stroke
       game.currentRound.strokes.push({ points: [point] });
       game.currentRound.currentStroke = [];
+      game.currentRound.redoStack = [];
     }
     return true;
   }
@@ -263,7 +268,30 @@ export class ScribbleEngine {
     if (game.currentRound.drawerId !== drawerId) return false;
     game.currentRound.strokes = [];
     game.currentRound.currentStroke = [];
+    game.currentRound.redoStack = [];
     return true;
+  }
+
+  /** Undo last stroke — returns updated strokes array or null */
+  undoStroke(roomId: string, drawerId: string): DrawStroke[] | null {
+    const game = this.games.get(roomId);
+    if (!game?.currentRound) return null;
+    if (game.currentRound.drawerId !== drawerId) return null;
+    if (game.currentRound.strokes.length === 0) return null;
+    const removed = game.currentRound.strokes.pop()!;
+    game.currentRound.redoStack.push(removed);
+    return game.currentRound.strokes;
+  }
+
+  /** Redo last undone stroke — returns updated strokes array or null */
+  redoStroke(roomId: string, drawerId: string): DrawStroke[] | null {
+    const game = this.games.get(roomId);
+    if (!game?.currentRound) return null;
+    if (game.currentRound.drawerId !== drawerId) return null;
+    if (game.currentRound.redoStack.length === 0) return null;
+    const restored = game.currentRound.redoStack.pop()!;
+    game.currentRound.strokes.push(restored);
+    return game.currentRound.strokes;
   }
 
   /** Submit a guess — returns result */

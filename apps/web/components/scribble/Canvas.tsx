@@ -28,11 +28,15 @@ interface Props {
   onDraw: (points: DrawPoint[]) => void;
   /** Emit clear */
   onClear: () => void;
+  /** Emit undo */
+  onUndo: () => void;
+  /** Emit redo */
+  onRedo: () => void;
   /** True while drawing phase is active */
   active: boolean;
 }
 
-export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw, onClear, active }: Props) {
+export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw, onClear, onUndo, onRedo, active }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [color, setColor] = useState("#1a1a2e");
@@ -265,6 +269,24 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
     }, 40);
     return () => { if (flushTimer.current) clearInterval(flushTimer.current); };
   }, [isDrawer, onDraw]);
+
+  // Keyboard shortcuts for undo/redo (drawer only)
+  useEffect(() => {
+    if (!isDrawer || !active) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        onUndo();
+      } else if (e.key === "y" || (e.key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        onRedo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDrawer, active, onUndo, onRedo]);
 
   // Mouse events (drawer only)
   const handleMouseDown = useCallback(
@@ -514,10 +536,20 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
             title="Eraser">⌫</button>
 
           {/* Clear */}
-          <button onClick={handleClear}
-            className="h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 ml-auto"
-            style={{ background: "rgba(239,100,97,0.1)", color: "var(--accent-error)" }}
-            title="Clear canvas">🗑 Clear</button>
+          <div className="flex gap-1 ml-auto">
+            <button onClick={onUndo}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-sm cursor-pointer transition-all"
+              style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}
+              title="Undo (Ctrl/⌘+Z)">↩</button>
+            <button onClick={onRedo}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-sm cursor-pointer transition-all"
+              style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}
+              title="Redo (Ctrl/⌘+Y)">↪</button>
+            <button onClick={handleClear}
+              className="h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1"
+              style={{ background: "rgba(239,100,97,0.1)", color: "var(--accent-error)" }}
+              title="Clear canvas">🗑 Clear</button>
+          </div>
         </div>
       )}
     </div>

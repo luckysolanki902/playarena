@@ -682,6 +682,16 @@ export function setupSocketIO(
       if (cleared) io.to(data.roomId).emit('scribble:clear-canvas');
     });
 
+    socket.on('scribble:undo', (data: { roomId: string }) => {
+      const strokes = scribbleEngine.undoStroke(data.roomId, sessionId);
+      if (strokes) io.to(data.roomId).emit('scribble:strokes-update', { strokes });
+    });
+
+    socket.on('scribble:redo', (data: { roomId: string }) => {
+      const strokes = scribbleEngine.redoStroke(data.roomId, sessionId);
+      if (strokes) io.to(data.roomId).emit('scribble:strokes-update', { strokes });
+    });
+
     socket.on('scribble:guess', (data: { roomId: string; text: string }) => {
       if (!data.text?.trim()) return;
       const game = scribbleEngine.getGame(data.roomId);

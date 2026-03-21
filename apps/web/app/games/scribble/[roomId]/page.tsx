@@ -177,6 +177,10 @@ export default function ScribbleRoom() {
       setStrokes([]); setRemotePoints([]);
     });
 
+    socket.on("scribble:strokes-update", ({ strokes: newStrokes }: { strokes: DrawStroke[] }) => {
+      setStrokes(newStrokes); setRemotePoints([]);
+    });
+
     socket.on("scribble:hint", ({ pattern }: { pattern: string }) => {
       setHintPattern(pattern); sfx.pop();
     });
@@ -285,6 +289,14 @@ export default function ScribbleRoom() {
 
   const sendClear = useCallback(() => {
     socketRef.current?.emit("scribble:clear-canvas", { roomId });
+  }, [roomId]);
+
+  const sendUndo = useCallback(() => {
+    socketRef.current?.emit("scribble:undo", { roomId });
+  }, [roomId]);
+
+  const sendRedo = useCallback(() => {
+    socketRef.current?.emit("scribble:redo", { roomId });
   }, [roomId]);
 
   const sendGuess = () => {
@@ -492,7 +504,7 @@ export default function ScribbleRoom() {
               {/* Canvas */}
               <div className="flex-1 min-h-0">
                 <ScribbleCanvas isDrawer={isDrawer} remotePoints={remotePoints} strokes={strokes}
-                  onDraw={sendDraw} onClear={sendClear} active={canvasActive} />
+                  onDraw={sendDraw} onClear={sendClear} onUndo={sendUndo} onRedo={sendRedo} active={canvasActive} />
               </div>
 
               {/* Guess input */}
