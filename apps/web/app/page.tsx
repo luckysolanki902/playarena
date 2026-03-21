@@ -307,7 +307,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="relative z-10 py-4 text-center">
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Powered by <span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span>
+          Powered by <a href="https://spyll.in" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}><span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span></a>
         </p>
       </footer>
     </main>

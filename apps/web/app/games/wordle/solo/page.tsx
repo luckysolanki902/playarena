@@ -319,7 +319,7 @@ export default function SoloWordlePage() {
       </div>
 
       <footer className="relative z-10 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-        Powered by <span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span>
+        Powered by <a href="https://spyll.in" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}><span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span></a>
       </footer>
     </div>
   );
