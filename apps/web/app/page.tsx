@@ -23,7 +23,7 @@ const GAMES = [
     color: "#ffd166",
     bgGlow: "rgba(255, 209, 102, 0.12)",
     letter: "S",
-    ready: false,
+    ready: true,
   },
   {
     id: "typeracer",

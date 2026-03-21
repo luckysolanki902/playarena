@@ -3,9 +3,12 @@ import { verifyToken } from './auth';
 import type { SessionStore } from './sessionStore';
 import type { RoomStore } from './roomStore';
 import { sanitizeText, validateChatMessage } from '@playarena/shared';
+import type { DrawPoint } from '@playarena/shared';
 import { WordleEngine } from '../engine/wordle';
+import { ScribbleEngine } from '../engine/scribble';
 
 const wordleEngine = new WordleEngine();
+const scribbleEngine = new ScribbleEngine();
 
 // Timer references per room
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -68,6 +71,75 @@ function startNextRound(io: SocketIOServer, roomId: string, roomStore: RoomStore
       handleRoundEnd(io, roomId, roomStore);
     }, round.timeLimit * 1000);
     roomTimers.set(roomId, timer);
+  }
+}
+
+// ─── Scribble helpers ───
+
+const CHOOSE_TIMEOUT_MS = 12_000; // 12s to pick a word before auto-choosing
+
+function startScribbleRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const roundMeta = scribbleEngine.startRound(roomId);
+  if (!roundMeta) {
+    // Game over
+    const finalRankings = scribbleEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('scribble:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    scribbleEngine.removeGame(roomId);
+    return;
+  }
+
+  // Send round-start to all — non-drawers see word length only
+  io.to(roomId).emit('scribble:round-start', {
+    round: roundMeta.round,
+    totalRounds: roundMeta.totalRounds,
+    drawerId: roundMeta.drawerId,
+    drawerUsername: roundMeta.drawerUsername,
+  });
+
+  // Send word choices only to the drawer socket
+  io.to(roomId).emit('scribble:word-choices', {
+    drawerId: roundMeta.drawerId,
+    words: roundMeta.wordChoices,
+  });
+
+  // Auto-choose if drawer doesn't pick within CHOOSE_TIMEOUT_MS
+  const game = scribbleEngine.getGame(roomId);
+  if (game) {
+    game.chooseTimer = setTimeout(() => {
+      const result = scribbleEngine.autoChooseWord(
+        roomId,
+        (pattern) => io.to(roomId).emit('scribble:hint', { pattern }),
+        () => handleScribbleRoundEnd(io, roomId, roomStore),
+      );
+      if (!result) return;
+      const word = scribbleEngine.getGame(roomId)?.currentRound?.word ?? '';
+      // Tell drawer their word was auto-chosen
+      io.to(roomId).emit('scribble:word-chosen', { wordLength: result.wordLength, hintPattern: result.hintPattern, isDrawer: false });
+      io.to(roomId).emit('scribble:drawing-started', { timeLimit: result.timeLimit, wordLength: result.wordLength, hintPattern: result.hintPattern });
+      // Drawer special emit done via game:word-chosen with word field
+      io.to(roomId).emit('scribble:drawer-word', { drawerId: game.drawerOrder[game.drawerIndex], word });
+    }, CHOOSE_TIMEOUT_MS);
+  }
+}
+
+function handleScribbleRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const result = scribbleEngine.endRound(roomId);
+  if (!result) return;
+
+  io.to(roomId).emit('scribble:round-end', {
+    word: result.word,
+    rankings: result.rankings,
+    nextRoundIn: result.isGameOver ? 0 : 5,
+  });
+
+  if (result.isGameOver) {
+    const finalRankings = scribbleEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('scribble:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    scribbleEngine.removeGame(roomId);
+  } else {
+    setTimeout(() => startScribbleRound(io, roomId, roomStore), 5000);
   }
 }
 
@@ -178,17 +250,23 @@ export function setupSocketIO(
         return;
       }
 
-      // Create engine game state
       const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
-      wordleEngine.createGame(data.roomId, players);
-
       roomStore.setStatus(data.roomId, 'starting');
       io.to(data.roomId).emit('lobby:game-starting', { countdown: 3 });
 
-      setTimeout(() => {
-        roomStore.setStatus(data.roomId, 'in_progress');
-        startNextRound(io, data.roomId, roomStore);
-      }, 3000);
+      if (room.game === 'wordle') {
+        wordleEngine.createGame(data.roomId, players);
+        setTimeout(() => {
+          roomStore.setStatus(data.roomId, 'in_progress');
+          startNextRound(io, data.roomId, roomStore);
+        }, 3000);
+      } else if (room.game === 'scribble') {
+        scribbleEngine.createGame(data.roomId, players);
+        setTimeout(() => {
+          roomStore.setStatus(data.roomId, 'in_progress');
+          startScribbleRound(io, data.roomId, roomStore);
+        }, 3000);
+      }
     });
 
     // ─── Wordle Game Events ───
@@ -248,6 +326,96 @@ export function setupSocketIO(
 
     socket.on('wordle:typing', (data: { roomId: string; isTyping: boolean }) => {
       socket.to(data.roomId).emit('wordle:typing', { sessionId, isTyping: data.isTyping });
+    });
+
+    // ─── Scribble Game Events ───
+
+    socket.on('scribble:choose-word', (data: { roomId: string; word: string }) => {
+      const result = scribbleEngine.chooseWord(
+        data.roomId,
+        sessionId,
+        data.word,
+        (pattern) => {
+          io.to(data.roomId).emit('scribble:hint', { pattern });
+        },
+        () => {
+          handleScribbleRoundEnd(io, data.roomId, roomStore);
+        },
+      );
+      if (!result) return;
+      // Tell drawer their own word, tell guessers the pattern only
+      socket.emit('scribble:word-chosen', { word: data.word === '__auto__' ? scribbleEngine.getGame(data.roomId)?.currentRound?.word : data.word, isDrawer: true });
+      socket.to(data.roomId).emit('scribble:word-chosen', {
+        wordLength: result.wordLength,
+        hintPattern: result.hintPattern,
+        isDrawer: false,
+      });
+      io.to(data.roomId).emit('scribble:drawing-started', {
+        timeLimit: result.timeLimit,
+        wordLength: result.wordLength,
+        hintPattern: result.hintPattern,
+      });
+    });
+
+    socket.on('scribble:draw', (data: { roomId: string; points: DrawPoint[] }) => {
+      const game = scribbleEngine.getGame(data.roomId);
+      if (!game?.currentRound || game.currentRound.drawerId !== sessionId) return;
+      for (const pt of data.points) scribbleEngine.recordDrawPoint(data.roomId, sessionId, pt);
+      socket.to(data.roomId).emit('scribble:draw', { points: data.points });
+    });
+
+    socket.on('scribble:clear-canvas', (data: { roomId: string }) => {
+      const cleared = scribbleEngine.clearCanvas(data.roomId, sessionId);
+      if (cleared) io.to(data.roomId).emit('scribble:clear-canvas');
+    });
+
+    socket.on('scribble:guess', (data: { roomId: string; text: string }) => {
+      if (!data.text?.trim()) return;
+      const game = scribbleEngine.getGame(data.roomId);
+      if (!game) return;
+
+      const result = scribbleEngine.submitGuess(data.roomId, sessionId, data.text);
+
+      if (!result) {
+        // Broadcast as chat message if not in drawing phase or player is drawer
+        const validation = validateChatMessage(data.text);
+        if (!validation.ok) return;
+        io.to(data.roomId).emit('scribble:chat', {
+          sessionId, username,
+          text: sanitizeText(data.text.trim()),
+          timestamp: Date.now(),
+          type: 'chat',
+        });
+        return;
+      }
+
+      if (result.correct) {
+        // Tell guesser their score, tell everyone else who guessed correctly
+        socket.emit('scribble:correct-guess', { points: result.points, totalScore: scribbleEngine.getGame(data.roomId)?.players.get(sessionId)?.score ?? 0 });
+        io.to(data.roomId).emit('scribble:player-guessed', {
+          sessionId, username, points: result.points, guessedCount: result.guessedCount,
+        });
+        if (result.allGuessed) handleScribbleRoundEnd(io, data.roomId, roomStore);
+      } else if (result.close) {
+        socket.emit('scribble:close-guess', { text: data.text });
+        // Show as garbled in chat for others (don't reveal the attempt)
+        io.to(data.roomId).emit('scribble:chat', {
+          sessionId, username,
+          text: '🤏 ...',
+          timestamp: Date.now(),
+          type: 'close',
+        });
+      } else {
+        // Broadcast guess as chat
+        const validation = validateChatMessage(data.text);
+        if (!validation.ok) return;
+        io.to(data.roomId).emit('scribble:chat', {
+          sessionId, username,
+          text: sanitizeText(data.text.trim()),
+          timestamp: Date.now(),
+          type: 'chat',
+        });
+      }
     });
 
     // ─── Chat Events ───

@@ -73,4 +73,17 @@ export const sfx = {
 
   /** Hover — subtle */
   hover: () => play(900, 'sine', 0.04, 0.02),
+
+  /** Draw stroke — subtle brushstroke */
+  draw: () => play(300, 'sine', 0.05, 0.03),
+
+  /** Correct guess — triumphant arpeggio */
+  guess: () => playSeq([
+    { f: 523, d: 0.1, delay: 0 },
+    { f: 784, d: 0.15, delay: 0.08 },
+    { f: 1047, d: 0.2, delay: 0.18 },
+  ], 'sine', 0.1),
+
+  /** Hint reveal — gentle chime */
+  reveal: () => play(660, 'triangle', 0.15, 0.07),
 };

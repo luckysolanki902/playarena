@@ -110,6 +110,8 @@ export default function SoloWordlePage() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Enter") handleKey("enter");
       else if (e.key === "Backspace") handleKey("backspace");
