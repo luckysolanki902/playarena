@@ -7,10 +7,12 @@ import type { DrawPoint } from '@playarena/shared';
 import { WordleEngine } from '../engine/wordle';
 import { ScribbleEngine } from '../engine/scribble';
 import { TypeRushEngine } from '../engine/typerush';
+import { PulseGridEngine } from '../engine/pulsegrid';
 
 const wordleEngine = new WordleEngine();
 const scribbleEngine = new ScribbleEngine();
 const typeRushEngine = new TypeRushEngine();
+const pulseGridEngine = new PulseGridEngine();
 
 // Timer references per room (game timers)
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -203,6 +205,60 @@ function handleTypeRushRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
   }
 }
 
+// ─── PulseGrid helpers ───
+
+function startPulseGridRound(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  const room = roomStore.get(roomId);
+  if (!room) return;
+
+  const players = room.players.map((p) => ({ sessionId: p.sessionId, username: p.username }));
+  const roundData = pulseGridEngine.startRound(roomId, players);
+  
+  if (!roundData) {
+    // Game over
+    const finalRankings = pulseGridEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('pulsegrid:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    pulseGridEngine.removeGame(roomId);
+    return;
+  }
+
+  io.to(roomId).emit('pulsegrid:round-start', {
+    round: roundData.round,
+    totalRounds: roundData.totalRounds,
+    gridSize: roundData.gridSize,
+    grid: roundData.grid,
+    players: roundData.players,
+    duration: roundData.duration,
+  });
+
+  // Start round timer
+  const timer = setTimeout(() => {
+    handlePulseGridRoundEnd(io, roomId, roomStore);
+  }, roundData.duration * 1000);
+  roomTimers.set(roomId, timer);
+}
+
+function handlePulseGridRoundEnd(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
+  clearRoomTimer(roomId);
+  const result = pulseGridEngine.endRound(roomId);
+  if (!result) return;
+
+  io.to(roomId).emit('pulsegrid:round-end', {
+    rankings: result.rankings,
+    nextRoundIn: result.isGameOver ? 0 : 5,
+  });
+
+  if (result.isGameOver) {
+    const finalRankings = pulseGridEngine.getFinalRankings(roomId);
+    io.to(roomId).emit('pulsegrid:game-end', { finalRankings });
+    roomStore.setStatus(roomId, 'finished');
+    pulseGridEngine.removeGame(roomId);
+  } else {
+    setTimeout(() => startPulseGridRound(io, roomId, roomStore), 5000);
+  }
+}
+
 /** Shared game-start logic used by both manual start and auto-start */
 function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
   const room = roomStore.get(roomId);
@@ -232,6 +288,12 @@ function doStartGame(io: SocketIOServer, roomId: string, roomStore: RoomStore) {
     setTimeout(() => {
       roomStore.setStatus(roomId, 'in_progress');
       startTypeRushRound(io, roomId, roomStore);
+    }, 3000);
+  } else if (room.game === 'pulsegrid') {
+    pulseGridEngine.createGame(roomId, players);
+    setTimeout(() => {
+      roomStore.setStatus(roomId, 'in_progress');
+      startPulseGridRound(io, roomId, roomStore);
     }, 3000);
   }
 }
@@ -583,6 +645,37 @@ export function setupSocketIO(
       // Check if round is complete
       if (typeRushEngine.isRoundComplete(data.roomId)) {
         handleTypeRushRoundEnd(io, data.roomId, roomStore);
+      }
+    });
+
+    // ─── PulseGrid Game Events ───
+
+    socket.on('pulsegrid:pulse', (data: { roomId: string; x: number; y: number; overcharge?: boolean }) => {
+      const result = pulseGridEngine.pulse(data.roomId, sessionId, data.x, data.y, data.overcharge ?? false);
+      if (!result) {
+        socket.emit('pulsegrid:error', { code: 'INVALID', message: 'Invalid pulse' });
+        return;
+      }
+      
+      if (result.cooldownError) {
+        socket.emit('pulsegrid:error', { code: 'COOLDOWN', message: 'Pulse on cooldown' });
+        return;
+      }
+
+      // Broadcast pulse result to all players
+      io.to(data.roomId).emit('pulsegrid:pulse-result', {
+        sessionId,
+        x: data.x,
+        y: data.y,
+        radius: result.radius,
+        capturedCells: result.capturedCells,
+        overcharge: data.overcharge ?? false,
+      });
+
+      // Send updated scores
+      const scores = pulseGridEngine.getScores(data.roomId);
+      if (scores) {
+        io.to(data.roomId).emit('pulsegrid:score-update', { scores });
       }
     });
 

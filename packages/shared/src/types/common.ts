@@ -16,7 +16,7 @@ export interface SessionToken {
 
 // ─── Room System ───
 
-export type GameType = 'wordle' | 'scribble' | 'typerush';
+export type GameType = 'wordle' | 'scribble' | 'typerush' | 'pulsegrid';
 export type RoomVisibility = 'public' | 'private';
 export type RoomStatus = 'waiting' | 'starting' | 'in_progress' | 'finished';
 
