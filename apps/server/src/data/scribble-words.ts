@@ -144,6 +144,32 @@ const MEDIUM_SCENES = [
   'skipping rope', 'surfing wave', 'skiing downhill', 'boxing glove', 'cheering crowd', 'singing karaoke', 'camping trip', 'snowball fight', 'cookie thief', 'messy painter',
 ];
 
+const SHAPE_FRIENDLY_BASES = [
+  'hut', 'house', 'cabin', 'cottage', 'barn', 'shed', 'gazebo', 'treehouse', 'birdhouse', 'dog house',
+  'castle', 'palace', 'lighthouse', 'windmill', 'pagoda', 'observatory', 'greenhouse', 'school', 'hospital', 'library',
+  'museum', 'bakery', 'church', 'fire station', 'post office', 'train station', 'bus stop', 'garage', 'warehouse', 'factory',
+  'apartment building', 'hotel', 'clock tower', 'water tower', 'watchtower', 'tree fort', 'tent', 'igloo', 'market stall', 'lemonade stand',
+  'carnival tent', 'tea house', 'boathouse', 'castle gate', 'tower bridge', 'cabin porch', 'camping tent', 'phone booth', 'ticket booth', 'flower shop',
+];
+
+const SHAPE_FRIENDLY_SETTINGS = [
+  'on hill',
+  'by river',
+  'at sunset',
+  'under moon',
+  'with flag',
+  'with fence',
+  'with path',
+  'in rain',
+  'in snow',
+  'beside pine tree',
+];
+
+const SHAPE_FRIENDLY_WORDS = uniqueWords([
+  ...SHAPE_FRIENDLY_BASES,
+  ...buildPromptPairs(SHAPE_FRIENDLY_BASES, SHAPE_FRIENDLY_SETTINGS, (base, setting) => `${base} ${setting}`),
+]);
+
 const FUN_ANIMALS = [
   'cat', 'dog', 'penguin', 'shark', 'octopus', 'crocodile', 'giraffe', 'elephant', 'panda', 'koala',
   'monkey', 'tiger', 'lion', 'fox', 'rabbit', 'bear', 'owl', 'flamingo', 'turtle', 'whale',
@@ -228,17 +254,20 @@ const HARD_WORDS = uniqueWords([
 ]);
 
 const SCRIBBLE_POOLS = {
+  shape: SHAPE_FRIENDLY_WORDS,
   easy: EASY_WORDS,
   medium: MEDIUM_WORDS,
   hard: HARD_WORDS,
 } as const;
 
 export const SCRIBBLE_WORDS: readonly string[] = uniqueWords([
+  ...SCRIBBLE_POOLS.shape,
   ...SCRIBBLE_POOLS.easy,
   ...SCRIBBLE_POOLS.medium,
   ...SCRIBBLE_POOLS.hard,
 ]);
 
+export const SCRIBBLE_SHAPE_WORD_COUNT = SCRIBBLE_POOLS.shape.length;
 export const SCRIBBLE_WORD_COUNT = SCRIBBLE_WORDS.length;
 
 function pickUnique(pool: readonly string[], used: Set<string>): string | null {
@@ -261,12 +290,18 @@ export function getWordChoices(count = 3): string[] {
   };
 
   if (count >= 3) {
-    addChoice(SCRIBBLE_POOLS.easy);
-    addChoice(SCRIBBLE_POOLS.medium);
-    addChoice(SCRIBBLE_POOLS.hard);
+    addChoice(SCRIBBLE_POOLS.shape);
+
+    const corePools = [SCRIBBLE_POOLS.easy, SCRIBBLE_POOLS.medium, SCRIBBLE_POOLS.hard]
+      .sort(() => Math.random() - 0.5);
+
+    for (const pool of corePools) {
+      if (out.length >= count) break;
+      addChoice(pool);
+    }
   }
 
-  const allPools = [SCRIBBLE_POOLS.easy, SCRIBBLE_POOLS.medium, SCRIBBLE_POOLS.hard];
+  const allPools = [SCRIBBLE_POOLS.shape, SCRIBBLE_POOLS.easy, SCRIBBLE_POOLS.medium, SCRIBBLE_POOLS.hard];
   while (out.length < count && used.size < SCRIBBLE_WORDS.length) {
     const pool = allPools[Math.floor(Math.random() * allPools.length)];
     addChoice(pool);
