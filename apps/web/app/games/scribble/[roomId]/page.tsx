@@ -34,6 +34,7 @@ export default function ScribbleRoom() {
   const [players, setPlayers] = useState<Player[]>([]);
   const playersRef = useRef<Player[]>([]);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [roomCode, setRoomCode] = useState<string | null>(null);
   const [autoStartSeconds, setAutoStartSeconds] = useState<number | null>(null);
   const [gamePlayers, setGamePlayers] = useState<ScribblePlayer[]>([]);
   const [countdown, setCountdown] = useState(3);
@@ -89,6 +90,7 @@ export default function ScribbleRoom() {
       setPlayers(room.players);
       playersRef.current = room.players;
       setVisibility(room.visibility);
+      if (room.code) setRoomCode(room.code);
       sfx.join();
     });
     socket.on("lobby:player-joined", ({ player }) => {
@@ -100,6 +102,7 @@ export default function ScribbleRoom() {
       setPlayers(room.players);
       playersRef.current = room.players;
       setVisibility(room.visibility);
+      if (room.code) setRoomCode(room.code);
     });
 
     // Auto-start for public rooms
@@ -421,6 +424,16 @@ export default function ScribbleRoom() {
                       {autoStartSeconds !== null ? `Starting in ${autoStartSeconds}s...` : "Waiting for players..."}
                     </p>
                   )
+                )}
+                {visibility === "private" && roomCode && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                    style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
+                    <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Room code</span>
+                    <span className="font-mono font-bold text-sm tracking-widest" style={{ color: "var(--text-primary)" }}>{roomCode}</span>
+                    <button onClick={() => { navigator.clipboard?.writeText(roomCode); sfx.click(); }}
+                      className="text-[10px] px-2 py-0.5 rounded-lg cursor-pointer font-bold"
+                      style={{ background: "rgba(255,209,102,0.15)", color: "var(--accent-warm)" }}>Copy</button>
+                  </div>
                 )}
               </motion.div>
             )}

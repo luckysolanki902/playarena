@@ -36,6 +36,7 @@ export default function NeonDriftRoomPage() {
   const [phase, setPhase] = useState<Phase>("lobby");
   const [players, setPlayers] = useState<Player[]>([]);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [roomCode, setRoomCode] = useState<string | null>(null);
   const [autoStartSeconds, setAutoStartSeconds] = useState<number | null>(null);
   const [countdown, setCountdown] = useState(3);
   const [round, setRound] = useState(1);
@@ -186,6 +187,7 @@ export default function NeonDriftRoomPage() {
     socket.on("lobby:room-joined", ({ room }) => {
       setPlayers(room.players);
       setVisibility(room.visibility);
+      if (room.code) setRoomCode(room.code);
       sfx.join();
     });
     socket.on("lobby:player-joined", ({ player }) => {
@@ -198,6 +200,7 @@ export default function NeonDriftRoomPage() {
     socket.on("lobby:room-updated", ({ room }) => {
       setPlayers(room.players);
       setVisibility(room.visibility);
+      if (room.code) setRoomCode(room.code);
     });
 
     socket.on("lobby:auto-start", ({ secondsLeft }) => setAutoStartSeconds(secondsLeft));
@@ -400,6 +403,16 @@ export default function NeonDriftRoomPage() {
                   {autoStartSeconds !== null ? `Starting in ${autoStartSeconds}s...` : "Waiting for players..."}
                 </p>
               )
+            )}
+            {visibility === "private" && roomCode && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
+                <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Room code</span>
+                <span className="font-mono font-bold text-sm tracking-widest" style={{ color: "var(--text-primary)" }}>{roomCode}</span>
+                <button onClick={() => { navigator.clipboard?.writeText(roomCode); sfx.click(); }}
+                  className="text-[10px] px-2 py-0.5 rounded-lg cursor-pointer font-bold"
+                  style={{ background: `${GAME_COLOR}22`, color: GAME_COLOR }}>Copy</button>
+              </div>
             )}
           </motion.div>
         )}

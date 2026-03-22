@@ -65,7 +65,7 @@ export default function NeonDriftLobbyPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Room not found"); }
       const { room } = await res.json();
       sfx.click();
-      router.push(`/games/neondrift/${room.id}`);
+      router.push(`/games/${room.game}/${room.id}`);
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Could not join room"); }
     setLoading(false);
   }
@@ -120,6 +120,7 @@ export default function NeonDriftLobbyPage() {
               className="flex-1 px-4 py-3 rounded-xl text-sm font-medium focus:outline-none"
               style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
               maxLength={6}
+              onKeyDown={(e) => e.key === "Enter" && handleJoinByCode()}
             />
             <button onClick={handleJoinByCode} disabled={!session || !code.trim() || loading}
               className="px-5 py-3 rounded-xl font-bold text-sm cursor-pointer disabled:opacity-40"

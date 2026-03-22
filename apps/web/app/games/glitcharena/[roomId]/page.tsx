@@ -27,6 +27,7 @@ interface Player {
 
 interface RoomInfo {
   id: string;
+  code?: string;
   hostSessionId: string;
   visibility: 'public' | 'private';
   players: Player[];
@@ -344,9 +345,16 @@ export default function GlitchArenaRoom() {
               <p className="text-gray-500">Waiting for more players...</p>
             )}
 
-            <p className="mt-6 text-gray-500 text-sm">
-              Share code: <span className="font-mono text-white">{room.id}</span>
-            </p>
+            {room.visibility === 'private' && room.code && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl mt-2"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+                <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Room code</span>
+                <span className="font-mono font-bold text-sm tracking-widest" style={{ color: 'var(--text-primary)' }}>{room.code}</span>
+                <button onClick={() => { navigator.clipboard?.writeText(room.code!); }}
+                  className="text-[10px] px-2 py-0.5 rounded-lg cursor-pointer font-bold"
+                  style={{ background: 'rgba(251,146,60,0.15)', color: THEME_COLOR }}>Copy</button>
+              </div>
+            )}
           </motion.div>
         )}
 

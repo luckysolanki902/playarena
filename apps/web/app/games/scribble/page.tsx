@@ -60,7 +60,7 @@ export default function ScribbleLobbyPage() {
       const res = await fetch(`${API}/rooms/join`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ code: code.trim().toUpperCase() }) });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Room not found"); }
       const { room } = await res.json();
-      sfx.click(); router.push(`/games/${GAME_ID}/${room.id}`);
+      sfx.click(); router.push(`/games/${room.game}/${room.id}`);
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Could not join room"); }
     setLoading(false);
   }
@@ -94,7 +94,7 @@ export default function ScribbleLobbyPage() {
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col gap-3 w-full max-w-xs">
           <button onClick={handleQuickMatch} disabled={!session || loading} className="btn-game px-6 py-4 rounded-2xl font-bold text-base cursor-pointer disabled:opacity-40" style={{ background: GAME_COLOR, color: "var(--bg-primary)" }}>{loading ? "Finding match..." : "⚡ Quick Match"}</button>
           <button onClick={handleCreateRoom} disabled={!session || loading} className="btn-game px-6 py-4 rounded-2xl font-bold text-base cursor-pointer disabled:opacity-40" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}>Create Private Room</button>
-          <div className="flex gap-2"><input type="text" placeholder="Room Code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="flex-1 px-4 py-3 rounded-xl text-sm font-medium focus:outline-none" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }} maxLength={6} /><button onClick={handleJoinByCode} disabled={!session || !code.trim() || loading} className="px-5 py-3 rounded-xl font-bold text-sm cursor-pointer disabled:opacity-40" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}>Join</button></div>
+          <div className="flex gap-2"><input type="text" placeholder="Room Code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="flex-1 px-4 py-3 rounded-xl text-sm font-medium focus:outline-none" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }} maxLength={6} onKeyDown={(e) => e.key === "Enter" && handleJoinByCode()} /><button onClick={handleJoinByCode} disabled={!session || !code.trim() || loading} className="px-5 py-3 rounded-xl font-bold text-sm cursor-pointer disabled:opacity-40" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}>Join</button></div>
           {error && <p className="text-xs text-center" style={{ color: "var(--accent-error)" }}>{error}</p>}
         </motion.div>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-6 text-xs text-center max-w-xs" style={{ color: "var(--text-muted)" }}><p className="font-bold mb-1">How to Play</p><p>{HOW_TO_PLAY}</p></motion.div>

@@ -85,6 +85,46 @@ export async function roomRoutes(app: FastifyInstance) {
     });
   });
 
+  // Join room by code
+  app.post<{ Body: { code: string } }>('/rooms/join', async (request, reply) => {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) {
+      return reply.status(401).send({ error: 'AUTH_REQUIRED' });
+    }
+    const payload = verifyToken(auth.slice(7));
+    if (!payload) {
+      return reply.status(401).send({ error: 'AUTH_FAILED' });
+    }
+
+    const { code } = request.body ?? {};
+    if (!code || typeof code !== 'string' || code.trim().length === 0) {
+      return reply.status(400).send({ error: 'INVALID_INPUT', message: 'Room code is required' });
+    }
+
+    const room = app.roomStore.getByCode(code.trim().toUpperCase());
+    if (!room) {
+      return reply.status(404).send({ error: 'ROOM_NOT_FOUND', message: 'No room with that code' });
+    }
+    if (room.status === 'in_progress') {
+      return reply.status(409).send({ error: 'ROOM_IN_PROGRESS', message: 'Game already started' });
+    }
+    if (room.players.length >= room.maxPlayers) {
+      return reply.status(409).send({ error: 'ROOM_FULL', message: 'Room is full' });
+    }
+
+    return reply.send({
+      room: {
+        id: room.id,
+        game: room.game,
+        code: room.code,
+        status: room.status,
+        visibility: room.visibility,
+        players: room.players.length,
+        maxPlayers: room.maxPlayers,
+      },
+    });
+  });
+
   // Get room by ID
   app.get<{ Params: { id: string } }>('/rooms/:id', async (request, reply) => {
     const room = app.roomStore.get(request.params.id);
