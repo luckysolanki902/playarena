@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
-    "build": "tsup src/index.ts --format esm --out-dir dist --no-splitting",
+    "build": "tsup",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
