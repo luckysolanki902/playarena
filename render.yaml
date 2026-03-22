@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: playarena-api
+    name: spyllio-server
     runtime: node
     region: oregon
     plan: free
-    buildCommand: pnpm install && pnpm build --filter @playarena/server
+    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @playarena/shared build && pnpm --filter @playarena/server build
     startCommand: node apps/server/dist/index.js
     envVars:
       - key: NODE_ENV
@@ -15,3 +15,5 @@ services:
         generateValue: true
       - key: AUTO_START_DELAY
         value: 15
+      - key: CORS_ORIGINS
+        value: https://playarena.vercel.app
