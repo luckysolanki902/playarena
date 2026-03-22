@@ -451,16 +451,16 @@ export default function ScribbleRoom() {
         {phase === "choosing" && (
           <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
             {isDrawer ? (
-              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-5">
+              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex w-full max-w-5xl flex-col items-center gap-5">
                 <div className="text-center">
                   <p className="text-lg font-extrabold mb-1" style={{ color: "var(--text-primary)" }}>🖌️ Pick your word!</p>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>Others will try to guess what you draw</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="grid w-full max-w-4xl gap-3 sm:grid-cols-3">
                   {wordChoices.map((word, i) => (
                     <motion.button key={word} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
                       onClick={() => chooseWord(word)} onMouseEnter={() => sfx.hover()}
-                      className="game-card px-8 py-4 rounded-2xl font-extrabold text-base cursor-pointer capitalize"
+                      className="game-card min-h-[88px] rounded-2xl px-4 py-4 text-center text-sm font-extrabold capitalize leading-snug whitespace-normal break-words cursor-pointer sm:min-h-[112px] sm:px-6 sm:text-base"
                       style={{
                         background: i === 0 ? "rgba(78,205,196,0.1)" : i === 1 ? "rgba(255,209,102,0.1)" : "rgba(167,139,250,0.1)",
                         border: `1.5px solid ${i === 0 ? "var(--accent-primary)" : i === 1 ? "var(--accent-warm)" : "var(--accent-soft)"}`,
@@ -494,17 +494,17 @@ export default function ScribbleRoom() {
             <div className="flex-1 flex flex-col p-2 sm:p-3 overflow-hidden" style={{ minWidth: 0 }}>
               {/* Word display */}
               <div className="flex items-center justify-between mb-1.5 px-1 shrink-0">
-                <div className="text-center flex-1">
+                <div className="text-center flex-1 min-w-0">
                   {isDrawer ? (
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Your word: </span>
-                      <span className="text-base font-extrabold capitalize" style={{ color: "var(--accent-warm)" }}>{myWord}</span>
+                      <span className="text-sm font-extrabold capitalize leading-snug whitespace-normal break-words sm:text-base" style={{ color: "var(--accent-warm)" }}>{myWord}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 px-2">
                       {hintPattern.split(" ").map((ch, i) => (
                         <motion.span key={i} initial={ch !== "_" ? { scale: 1.4, color: "#4ecdc4" } : {}} animate={{ scale: 1 }}
-                          className="text-lg font-black tracking-widest"
+                          className="text-base font-black tracking-widest sm:text-lg"
                           style={{ color: ch !== "_" && ch !== "/" ? "var(--accent-primary)" : "var(--text-muted)", minWidth: ch === "/" ? 12 : 16, textAlign: "center" }}>
                           {ch === "/" ? " " : ch}
                         </motion.span>
@@ -703,7 +703,7 @@ export default function ScribbleRoom() {
             <div className="text-center">
               <h2 className="text-xl font-extrabold mb-1" style={{ color: "var(--text-primary)" }}>Round {round} over!</h2>
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                The word was <span className="font-extrabold capitalize" style={{ color: "var(--accent-warm)" }}>{roundWord}</span>
+                The word was <span className="inline-block font-extrabold capitalize leading-snug whitespace-normal break-words" style={{ color: "var(--accent-warm)" }}>{roundWord}</span>
               </p>
             </div>
             {/* Personal rank message */}
