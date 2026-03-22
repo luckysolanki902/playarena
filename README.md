@@ -29,6 +29,8 @@ pnpm dev
 # Backend:  http://localhost:4000
 ```
 
+Deployment details and verification commands are in `DEPLOYMENT.md`.
+
 ## Project Structure
 ```
 spyllio/
