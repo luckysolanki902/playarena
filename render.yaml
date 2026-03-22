@@ -4,7 +4,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @playarena/shared build && pnpm --filter @playarena/server build
+    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile --prod=false && pnpm --filter @playarena/shared build && pnpm --filter @playarena/server build
     startCommand: node apps/server/dist/index.js
     envVars:
       - key: NODE_ENV
