@@ -410,7 +410,7 @@ export default function PulseGridRoomPage() {
               );
               return null;
             })()}
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
@@ -493,7 +493,7 @@ export default function PulseGridRoomPage() {
               return null;
             })()}
             <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>Game Over!</h2>
-            <div className="flex flex-col gap-2 w-80">
+            <div className="flex flex-col gap-2 w-full max-w-sm">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}

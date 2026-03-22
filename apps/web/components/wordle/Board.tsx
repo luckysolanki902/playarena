@@ -38,7 +38,7 @@ function Tile({ letter, feedback, delay = 0, active }: TileProps) {
       initial={feedback ? { rotateX: 0 } : undefined}
       animate={feedback ? { rotateX: [0, 90, 0] } : letter ? { scale: [1, 1.08, 1] } : undefined}
       transition={feedback ? { duration: 0.55, delay, times: [0, 0.5, 1], ease: "easeInOut" } : { duration: 0.1 }}
-      className="w-[54px] h-[54px] sm:w-[62px] sm:h-[62px] flex items-center justify-center text-xl sm:text-2xl font-black uppercase rounded-xl select-none"
+      className="w-[46px] h-[46px] min-[380px]:w-[50px] min-[380px]:h-[50px] sm:w-[58px] sm:h-[58px] md:w-[62px] md:h-[62px] flex items-center justify-center text-lg min-[380px]:text-xl sm:text-2xl font-black uppercase rounded-xl select-none"
       style={{
         background: bgColor,
         border: `2.5px solid ${borderColor}`,
@@ -76,7 +76,7 @@ export default function WordleBoard({ guesses, currentGuess, maxAttempts, wordLe
   }
 
   return (
-    <div className="flex flex-col items-center gap-[6px]">
+    <div className="flex flex-col items-center gap-[5px] sm:gap-[6px]">
       {rows.map((row, rowIdx) => {
         const isCurrentRow = rowIdx === guesses.length;
         return (
@@ -84,7 +84,7 @@ export default function WordleBoard({ guesses, currentGuess, maxAttempts, wordLe
             key={rowIdx}
             animate={shake && isCurrentRow ? { x: [0, -8, 8, -8, 8, 0] } : {}}
             transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="flex gap-[6px]"
+            className="flex gap-[5px] sm:gap-[6px]"
           >
             {row.word.split("").map((letter, colIdx) => (
               <Tile

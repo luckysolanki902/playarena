@@ -20,9 +20,11 @@ const syncShotEngine = new SyncShotEngine();
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // Auto-start timers for public/quick-match rooms
 const autoStartTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; countdown: ReturnType<typeof setInterval> }>();
+const scribbleDisconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Auto-start delay in seconds (0 for instant start in dev)
 const AUTO_START_DELAY = parseInt(process.env.AUTO_START_DELAY || '15', 10);
+const SCRIBBLE_RECONNECT_GRACE_MS = 15_000;
 
 function clearRoomTimer(roomId: string) {
   const t = roomTimers.get(roomId);
@@ -35,6 +37,19 @@ function clearAutoStartTimer(roomId: string) {
     clearTimeout(ast.timer);
     clearInterval(ast.countdown);
     autoStartTimers.delete(roomId);
+  }
+}
+
+function getScribbleDisconnectKey(roomId: string, sessionId: string) {
+  return `${roomId}:${sessionId}`;
+}
+
+function clearScribbleDisconnectTimer(roomId: string, sessionId: string) {
+  const key = getScribbleDisconnectKey(roomId, sessionId);
+  const timer = scribbleDisconnectTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    scribbleDisconnectTimers.delete(key);
   }
 }
 
@@ -160,6 +175,41 @@ function handleScribbleRoundEnd(io: SocketIOServer, roomId: string, roomStore: R
     scribbleEngine.removeGame(roomId);
   } else {
     setTimeout(() => startScribbleRound(io, roomId, roomStore), 5000);
+  }
+}
+
+function finalizeScribbleDeparture(
+  io: SocketIOServer,
+  roomId: string,
+  sessionId: string,
+  username: string,
+  roomStore: RoomStore,
+) {
+  clearScribbleDisconnectTimer(roomId, sessionId);
+
+  const scribbleGame = scribbleEngine.getGame(roomId);
+  if (scribbleGame) {
+    const removal = scribbleEngine.removePlayer(roomId, sessionId);
+    if (removal) {
+      if (removal.playersLeft < 2) {
+        const finalRankings = scribbleEngine.getFinalRankings(roomId);
+        io.to(roomId).emit('scribble:game-end', { finalRankings });
+        roomStore.setStatus(roomId, 'finished');
+        scribbleEngine.removeGame(roomId);
+      } else if (removal.wasDrawer || scribbleEngine.isRoundOver(roomId)) {
+        handleScribbleRoundEnd(io, roomId, roomStore);
+      }
+    }
+  }
+
+  const removedFromRoom = roomStore.removePlayer(roomId, sessionId);
+  if (!removedFromRoom) return;
+
+  io.to(roomId).emit('lobby:player-left', { sessionId, username });
+  const updated = roomStore.get(roomId);
+  if (updated) {
+    io.to(roomId).emit('lobby:room-updated', { room: updated });
+    maybeCancelAutoStart(io, roomId, roomStore);
   }
 }
 
@@ -496,6 +546,8 @@ export function setupSocketIO(
         return;
       }
 
+      clearScribbleDisconnectTimer(room.id, sessionId);
+
       // Allow reconnection to in-progress scribble games
       if (room.status !== 'waiting') {
         const scribbleGame = scribbleEngine.getGame(room.id);
@@ -549,9 +601,15 @@ export function setupSocketIO(
     });
 
     socket.on('lobby:leave-room', (data: { roomId: string }) => {
-      roomStore.removePlayer(data.roomId, sessionId);
+      clearScribbleDisconnectTimer(data.roomId, sessionId);
       socket.leave(data.roomId);
       socket.data.currentRoomId = undefined;
+      const scribbleGame = scribbleEngine.getGame(data.roomId);
+      if (scribbleGame?.players.has(sessionId)) {
+        finalizeScribbleDeparture(io, data.roomId, sessionId, username, roomStore);
+        return;
+      }
+      roomStore.removePlayer(data.roomId, sessionId);
       socket.to(data.roomId).emit('lobby:player-left', { sessionId, username });
       const updated = roomStore.get(data.roomId);
       if (updated) {
@@ -675,6 +733,9 @@ export function setupSocketIO(
       if (!game?.currentRound || game.currentRound.drawerId !== sessionId) return;
       for (const pt of data.points) scribbleEngine.recordDrawPoint(data.roomId, sessionId, pt);
       socket.to(data.roomId).emit('scribble:draw', { points: data.points });
+      if (data.points.some((pt) => pt.type === 'end' || pt.type === 'shape' || pt.type === 'fill')) {
+        io.to(data.roomId).emit('scribble:strokes-update', { strokes: game.currentRound.strokes });
+      }
     });
 
     socket.on('scribble:clear-canvas', (data: { roomId: string }) => {
@@ -866,24 +927,17 @@ export function setupSocketIO(
       const currentRoomId = socket.data.currentRoomId as string | undefined;
       if (!currentRoomId) return;
 
-      const room = roomStore.get(currentRoomId);
-
       // Handle scribble game cleanup if game is in progress
       const scribbleGame = scribbleEngine.getGame(currentRoomId);
-      if (scribbleGame) {
-        const removal = scribbleEngine.removePlayer(currentRoomId, sessionId);
-        if (removal) {
-          if (removal.playersLeft < 2) {
-            // Not enough players — end the game
-            const finalRankings = scribbleEngine.getFinalRankings(currentRoomId);
-            io.to(currentRoomId).emit('scribble:game-end', { finalRankings });
-            roomStore.setStatus(currentRoomId, 'finished');
-            scribbleEngine.removeGame(currentRoomId);
-          } else if (removal.wasDrawer) {
-            // Drawer left — end current round and move to next
-            handleScribbleRoundEnd(io, currentRoomId, roomStore);
-          }
-        }
+      if (scribbleGame?.players.has(sessionId)) {
+        clearScribbleDisconnectTimer(currentRoomId, sessionId);
+        const key = getScribbleDisconnectKey(currentRoomId, sessionId);
+        const timer = setTimeout(() => {
+          finalizeScribbleDeparture(io, currentRoomId, sessionId, username, roomStore);
+          scribbleDisconnectTimers.delete(key);
+        }, SCRIBBLE_RECONNECT_GRACE_MS);
+        scribbleDisconnectTimers.set(key, timer);
+        return;
       }
 
       // Remove player from room and notify others

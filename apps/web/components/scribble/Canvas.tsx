@@ -16,6 +16,7 @@ const WIDTHS = [
 ];
 
 const CANVAS_BG = "#f8f5f0";
+const BOARD_ASPECT_RATIO = 4 / 3;
 type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle' | 'triangle' | 'fill';
 
 interface Props {
@@ -38,7 +39,9 @@ interface Props {
 
 export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw, onClear, onUndo, onRedo, active }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [boardSize, setBoardSize] = useState({ width: 0, height: 0 });
   const [color, setColor] = useState("#1a1a2e");
   const [width, setWidth] = useState(10);
   const [tool, setTool] = useState<Tool>('pen');
@@ -50,9 +53,18 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
   const lastRemotePoint = useRef<DrawPoint | null>(null);
   const shapeStartPos = useRef<{ x: number; y: number } | null>(null);
   const canvasSnapshot = useRef<ImageData | null>(null);
+  // Always-current mirror of strokes prop — used by resize/visibility callbacks
+  const strokesRef = useRef<DrawStroke[]>(strokes);
+  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
 
   const effectiveColor = tool === 'eraser' ? CANVAS_BG : color;
   const effectiveWidth = tool === 'eraser' ? 28 : width;
+
+  const flushPendingPoints = useCallback(() => {
+    if (!pendingPoints.current.length) return;
+    onDraw([...pendingPoints.current]);
+    pendingPoints.current = [];
+  }, [onDraw]);
 
   // Normalize canvas coords to 0-1
   const normalize = useCallback((e: { clientX: number; clientY: number }): { x: number; y: number } | null => {
@@ -205,28 +217,95 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
     [drawSegment, drawDot, drawShape, floodFill],
   );
 
-  // Init canvas with white background
+  // Fit the drawing board into the available viewport while keeping a stable aspect ratio.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const updateBoardSize = () => {
+      const maxWidth = stage.clientWidth;
+      const maxHeight = stage.clientHeight || maxWidth / BOARD_ASPECT_RATIO;
+      if (!maxWidth) return;
+
+      let nextWidth = maxWidth;
+      let nextHeight = nextWidth / BOARD_ASPECT_RATIO;
+
+      if (nextHeight > maxHeight) {
+        nextHeight = maxHeight;
+        nextWidth = nextHeight * BOARD_ASPECT_RATIO;
+      }
+
+      setBoardSize((prev) => {
+        const width = Math.max(0, Math.floor(nextWidth));
+        const height = Math.max(0, Math.floor(nextHeight));
+        if (prev.width === width && prev.height === height) return prev;
+        return { width, height };
+      });
+    };
+
+    updateBoardSize();
+    const observer = new ResizeObserver(updateBoardSize);
+    observer.observe(stage);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Init canvas + handle resize + recover from tab-switch canvas wipe
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const resize = () => {
+    const applySize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
-      // Only resize if needed to avoid clearing
+      // Always reset when dimensions change (or force-called)
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
-        replayStrokes(strokes);
       }
+      // Re-fill background and replay — use strokesRef so we always have latest
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = CANVAS_BG;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      replayStrokes(strokesRef.current);
     };
 
-    resize();
-    const obs = new ResizeObserver(resize);
+    applySize();
+    const obs = new ResizeObserver(applySize);
     obs.observe(container);
-    return () => obs.disconnect();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Browsers may clear the canvas pixel buffer when a tab is hidden.
+    // Replay strokes as soon as the tab becomes visible again.
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingPoints();
+      } else {
+        lastRemotePoint.current = null;
+        applySize();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const handlePageShow = () => {
+      lastRemotePoint.current = null;
+      applySize();
+    };
+    const handlePageHide = () => {
+      flushPendingPoints();
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      obs.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [flushPendingPoints, replayStrokes]); // replayStrokes is stable (all deps are stable useCallbacks)
 
   // Replay when strokes change (late join or clear) — also reset lastRemotePoint
   useEffect(() => {
@@ -262,13 +341,13 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
   useEffect(() => {
     if (!isDrawer) return;
     flushTimer.current = setInterval(() => {
-      if (pendingPoints.current.length > 0) {
-        onDraw([...pendingPoints.current]);
-        pendingPoints.current = [];
-      }
+      flushPendingPoints();
     }, 40);
-    return () => { if (flushTimer.current) clearInterval(flushTimer.current); };
-  }, [isDrawer, onDraw]);
+    return () => {
+      if (flushTimer.current) clearInterval(flushTimer.current);
+      flushPendingPoints();
+    };
+  }, [flushPendingPoints, isDrawer]);
 
   // Keyboard shortcuts for undo/redo (drawer only)
   useEffect(() => {
@@ -348,7 +427,10 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       isDrawing.current = false;
       const pos = normalize(e.nativeEvent);
       if (tool === 'pen' || tool === 'eraser') {
-        if (pos) pendingPoints.current.push({ ...pos, type: "end", color: effectiveColor, width: effectiveWidth });
+        if (pos) {
+          pendingPoints.current.push({ ...pos, type: "end", color: effectiveColor, width: effectiveWidth });
+        }
+        flushPendingPoints();
       } else if (pos && shapeStartPos.current) {
         const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: pos.x, y2: pos.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' };
         const ctx = canvasRef.current?.getContext("2d");
@@ -358,7 +440,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       }
       lastPos.current = null;
     },
-    [isDrawer, normalize, effectiveColor, effectiveWidth, tool, drawShape, onDraw],
+    [isDrawer, normalize, effectiveColor, effectiveWidth, tool, drawShape, flushPendingPoints, onDraw],
   );
 
   // Touch events
@@ -421,7 +503,10 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
     if (!isDrawer || !isDrawing.current) return;
     isDrawing.current = false;
     if (tool === 'pen' || tool === 'eraser') {
-      if (lastPos.current) pendingPoints.current.push({ x: lastPos.current.x, y: lastPos.current.y, type: "end", color: effectiveColor, width: effectiveWidth });
+      if (lastPos.current) {
+        pendingPoints.current.push({ x: lastPos.current.x, y: lastPos.current.y, type: "end", color: effectiveColor, width: effectiveWidth });
+      }
+      flushPendingPoints();
     } else if (lastPos.current && shapeStartPos.current) {
       const shapePt: DrawPoint = { x: shapeStartPos.current.x, y: shapeStartPos.current.y, x2: lastPos.current.x, y2: lastPos.current.y, type: "shape", color: effectiveColor, width: effectiveWidth, shape: tool as 'line' | 'rect' | 'circle' | 'triangle' };
       const ctx = canvasRef.current?.getContext("2d");
@@ -430,7 +515,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
       shapeStartPos.current = null; canvasSnapshot.current = null;
     }
     lastPos.current = null;
-  }, [isDrawer, effectiveColor, effectiveWidth, tool, drawShape, onDraw]);
+  }, [isDrawer, effectiveColor, effectiveWidth, tool, drawShape, flushPendingPoints, onDraw]);
 
   const handleClear = () => {
     const canvas = canvasRef.current;
@@ -446,33 +531,38 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
 
   return (
     <div className="flex flex-col gap-2 w-full h-full">
-      {/* Canvas */}
-      <div ref={containerRef}
-        className="relative flex-1 rounded-2xl overflow-hidden"
-        style={{
-          background: "#f8f5f0",
-          border: isDrawer && active ? "2px solid var(--accent-warm)" : "2px solid var(--border-subtle)",
-          boxShadow: isDrawer && active ? "0 0 0 4px rgba(255,209,102,0.1)" : "none",
-          cursor: isDrawer && active ? (tool === 'eraser' ? "cell" : tool === 'fill' ? "crosshair" : "crosshair") : "default",
-          minHeight: 340,
-        }}>
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full touch-none"
-          style={{ display: "block" }}
-          onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-          onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd} />
-        {!active && (
-          <div className="absolute inset-0 flex items-center justify-center"
-            style={{ background: "rgba(248,245,240,0.7)", backdropFilter: "blur(2px)" }}>
-            <p className="text-sm font-bold" style={{ color: "var(--text-muted)" }}>Waiting for drawer...</p>
-          </div>
-        )}
+      {/* Canvas — same board ratio on every device */}
+      <div ref={stageRef} className="flex-1 min-h-0 flex items-center justify-center">
+        <div ref={containerRef}
+          className="relative rounded-2xl overflow-hidden w-full max-w-full"
+          style={{
+            width: boardSize.width || "100%",
+            height: boardSize.height || undefined,
+            aspectRatio: `${BOARD_ASPECT_RATIO}`,
+            background: "#f8f5f0",
+            border: isDrawer && active ? "2px solid var(--accent-warm)" : "2px solid var(--border-subtle)",
+            boxShadow: isDrawer && active ? "0 0 0 4px rgba(255,209,102,0.1)" : "none",
+            cursor: isDrawer && active ? (tool === 'eraser' ? "cell" : "crosshair") : "default",
+          }}>
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full touch-none"
+            style={{ display: "block" }}
+            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd} />
+          {!active && (
+            <div className="absolute inset-0 flex items-center justify-center"
+              style={{ background: "rgba(248,245,240,0.7)", backdropFilter: "blur(2px)" }}>
+              <p className="text-sm font-bold" style={{ color: "var(--text-muted)" }}>Waiting for drawer...</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Toolbar (drawer only) */}
+      {/* Toolbar (drawer only) — scrollable on mobile */}
       {isDrawer && (
-        <div className="flex flex-wrap items-center gap-2 px-1">
+        <div className="overflow-x-auto pb-0.5">
+          <div className="flex items-center gap-2 px-1 min-w-max">
           {/* Tool selector */}
           <div className="flex gap-1">
             {([
@@ -549,6 +639,7 @@ export default function ScribbleCanvas({ isDrawer, remotePoints, strokes, onDraw
               className="h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1"
               style={{ background: "rgba(239,100,97,0.1)", color: "var(--accent-error)" }}
               title="Clear canvas">🗑 Clear</button>
+          </div>
           </div>
         </div>
       )}

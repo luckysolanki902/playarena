@@ -7,9 +7,11 @@ import Link from "next/link";
 import { useSessionStore } from "@/lib/store";
 import { connectSocket, disconnectSocket } from "@/lib/socket";
 import { sfx } from "@/lib/sounds";
+import DirectionPad from "@/components/game/DirectionPad";
 import type { VoidfallPosition, SafeZone } from "@playarena/shared";
 
 type Phase = "lobby" | "countdown" | "playing" | "round-end" | "game-end";
+type MoveDirection = "up" | "down" | "left" | "right";
 
 interface Player { sessionId: string; username: string; isHost: boolean; }
 interface GamePlayer {
@@ -50,6 +52,7 @@ export default function VoidfallRoomPage() {
   const [nextRoundIn, setNextRoundIn] = useState(0);
 
   const [toast, setToast] = useState("");
+  const [touchDirection, setTouchDirection] = useState<MoveDirection | null>(null);
 
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,6 +191,25 @@ export default function VoidfallRoomPage() {
     }
   }, [phase, draw]);
 
+  const startTouchMove = useCallback((direction: MoveDirection) => {
+    const directionMap: Record<MoveDirection, { x: number; y: number }> = {
+      up: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+    };
+    setTouchDirection(direction);
+    socketRef.current?.emit("voidfall:move", { roomId, direction: directionMap[direction] });
+  }, [roomId]);
+
+  const stopTouchMove = useCallback((direction?: MoveDirection) => {
+    setTouchDirection((current) => {
+      if (direction && current !== direction) return current;
+      socketRef.current?.emit("voidfall:stop", { roomId });
+      return null;
+    });
+  }, [roomId]);
+
   // Keyboard controls
   useEffect(() => {
     const updateDirection = () => {
@@ -214,6 +236,7 @@ export default function VoidfallRoomPage() {
         e.preventDefault();
         if (!keysPressed.current.has(key)) {
           keysPressed.current.add(key);
+          setTouchDirection(null);
           updateDirection();
         }
       }
@@ -484,7 +507,7 @@ export default function VoidfallRoomPage() {
 
         {/* Playing */}
         {phase === "playing" && (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4 w-full">
             {/* Player status */}
             <div className="flex justify-center gap-3 flex-wrap">
               {Object.values(gamePlayers).map((p) => (
@@ -499,14 +522,25 @@ export default function VoidfallRoomPage() {
             </div>
 
             {/* Game canvas */}
-            <div className="rounded-xl overflow-hidden" style={{ boxShadow: `0 0 40px ${GAME_COLOR}22` }}>
-              <canvas ref={canvasRef} style={{ display: "block" }} />
+            <div className="w-full max-w-[640px] rounded-xl overflow-hidden"
+              style={{ boxShadow: `0 0 40px ${GAME_COLOR}22` }}>
+              <canvas ref={canvasRef} className="block w-full h-auto" />
             </div>
 
             {/* Controls hint */}
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Use ↑ ↓ ← → or WASD to move
+            <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
+              Use ↑ ↓ ← → or WASD to move. On mobile, hold the pad below.
             </p>
+
+            <DirectionPad
+              className="lg:hidden"
+              accentColor={GAME_COLOR}
+              title="Move"
+              hint="Hold a direction to keep moving"
+              activeDirection={touchDirection}
+              onDirectionStart={startTouchMove}
+              onDirectionEnd={stopTouchMove}
+            />
           </div>
         )}
 
@@ -514,7 +548,7 @@ export default function VoidfallRoomPage() {
         {phase === "round-end" && roundRankings.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-5">
             <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Round {round} Results</h2>
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
@@ -545,7 +579,7 @@ export default function VoidfallRoomPage() {
         {phase === "game-end" && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6">
             <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>🏆 Game Over!</h2>
-            <div className="flex flex-col gap-2 w-80">
+            <div className="flex flex-col gap-2 w-full max-w-sm">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}

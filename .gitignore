@@ -13,3 +13,4 @@ playwright-report
 _rewrite*.py
 .vercel
 .env*.local
+*.tsbuildinfo

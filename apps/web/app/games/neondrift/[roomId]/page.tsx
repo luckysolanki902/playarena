@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useSessionStore } from "@/lib/store";
 import { connectSocket, disconnectSocket } from "@/lib/socket";
 import { sfx } from "@/lib/sounds";
+import DirectionPad from "@/components/game/DirectionPad";
 import type { Position, Direction } from "@playarena/shared";
 
 type Phase = "lobby" | "countdown" | "playing" | "round-end" | "game-end";
@@ -143,6 +144,10 @@ export default function NeonDriftRoomPage() {
     }
   }, [phase, draw, gamePlayers]);
 
+  const sendTurn = useCallback((direction: Direction) => {
+    socketRef.current?.emit("neondrift:turn", { roomId, direction });
+  }, [roomId]);
+
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -161,7 +166,7 @@ export default function NeonDriftRoomPage() {
 
       if (direction) {
         e.preventDefault();
-        socketRef.current?.emit("neondrift:turn", { roomId, direction });
+        sendTurn(direction);
       }
     };
 
@@ -175,7 +180,7 @@ export default function NeonDriftRoomPage() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [phase, roomId]);
+  }, [phase, sendTurn]);
 
   useEffect(() => {
     if (!session) return;
@@ -428,7 +433,7 @@ export default function NeonDriftRoomPage() {
 
         {/* Playing */}
         {phase === "playing" && (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4 w-full">
             {/* Player status */}
             <div className="flex justify-center gap-3 flex-wrap">
               {Object.values(gamePlayers).map((p) => (
@@ -443,14 +448,24 @@ export default function NeonDriftRoomPage() {
             </div>
 
             {/* Game canvas */}
-            <div className="rounded-xl overflow-hidden" style={{ boxShadow: `0 0 40px ${GAME_COLOR}22` }}>
-              <canvas ref={canvasRef} style={{ display: "block" }} />
+            <div className="w-full max-w-[640px] rounded-xl overflow-hidden"
+              style={{ boxShadow: `0 0 40px ${GAME_COLOR}22` }}>
+              <canvas ref={canvasRef} className="block w-full h-auto" />
             </div>
 
             {/* Controls hint */}
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Use ↑ ↓ ← → or WASD to steer
+            <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
+              Use ↑ ↓ ← → or WASD to steer. On mobile, tap the pad below.
             </p>
+
+            <DirectionPad
+              className="lg:hidden"
+              accentColor={GAME_COLOR}
+              title="Steer"
+              hint="Tap a direction to turn instantly"
+              activeDirection={session?.sessionId ? gamePlayers[session.sessionId]?.direction ?? null : null}
+              onDirectionTap={sendTurn}
+            />
           </div>
         )}
 
@@ -458,7 +473,7 @@ export default function NeonDriftRoomPage() {
         {phase === "round-end" && roundRankings.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-5">
             <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Round {round} Results</h2>
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
@@ -489,7 +504,7 @@ export default function NeonDriftRoomPage() {
         {phase === "game-end" && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6">
             <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>🏆 Game Over!</h2>
-            <div className="flex flex-col gap-2 w-80">
+            <div className="flex flex-col gap-2 w-full max-w-sm">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}

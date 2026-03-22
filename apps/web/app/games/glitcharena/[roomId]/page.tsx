@@ -266,7 +266,7 @@ export default function GlitchArenaRoom() {
           )}
         </div>
         {phase === 'playing' && (
-          <div className="flex gap-6 text-sm">
+          <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-6 text-xs sm:text-sm">
             <span className="text-gray-400">
               Round <span className="text-white font-bold">{roundNumber}</span>/3
             </span>
@@ -374,14 +374,15 @@ export default function GlitchArenaRoom() {
 
         {/* Playing */}
         {phase === 'playing' && (
-          <div className="flex gap-6">
+          <div className="flex flex-col lg:flex-row items-center lg:items-start gap-4 lg:gap-6 w-full max-w-5xl">
             {/* Game Arena */}
             <div
               ref={arenaRef}
               className={arenaClasses}
               style={{
-                width: settings.arenaWidth,
-                height: settings.arenaHeight,
+                width: '100%',
+                maxWidth: settings.arenaWidth,
+                aspectRatio: `${settings.arenaWidth} / ${settings.arenaHeight}`,
                 backgroundColor: '#0a0a0f',
                 border: `2px solid ${THEME_COLOR}`,
               }}
@@ -411,12 +412,13 @@ export default function GlitchArenaRoom() {
                     onClick={() => handleButtonClick(button.id)}
                     className="absolute rounded-full flex items-center justify-center font-bold text-2xl shadow-lg transition-all cursor-pointer"
                     style={{
-                      left: button.position.x - button.size,
-                      top: button.position.y - button.size,
-                      width: button.size * 2,
-                      height: button.size * 2,
+                      left: `${((button.position.x - button.size) / settings.arenaWidth) * 100}%`,
+                      top: `${((button.position.y - button.size) / settings.arenaHeight) * 100}%`,
+                      width: `${((button.size * 2) / settings.arenaWidth) * 100}%`,
+                      height: `${((button.size * 2) / settings.arenaHeight) * 100}%`,
                       backgroundColor: button.color,
                       boxShadow: `0 0 20px ${button.color}50`,
+                      fontSize: 'clamp(1rem, 3vw, 1.5rem)',
                     }}
                   >
                     {button.symbol}
@@ -434,9 +436,10 @@ export default function GlitchArenaRoom() {
                     exit={{ opacity: 0 }}
                     className="absolute pointer-events-none font-bold text-2xl"
                     style={{
-                      left: effect.position.x,
-                      top: effect.position.y,
+                      left: `${(effect.position.x / settings.arenaWidth) * 100}%`,
+                      top: `${(effect.position.y / settings.arenaHeight) * 100}%`,
                       color: effect.color,
+                      fontSize: 'clamp(1rem, 3vw, 1.5rem)',
                     }}
                   >
                     {effect.points > 0 ? '+' : ''}{effect.points}
@@ -446,7 +449,7 @@ export default function GlitchArenaRoom() {
             </div>
 
             {/* Scoreboard */}
-            <div className="bg-gray-900/80 rounded-lg p-4 min-w-[200px]">
+            <div className="bg-gray-900/80 rounded-lg p-4 w-full lg:w-[240px]">
               <h3 className="font-bold mb-4 text-center" style={{ color: THEME_COLOR }}>
                 Scores
               </h3>

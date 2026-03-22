@@ -454,12 +454,12 @@ export default function TypeRushRoomPage() {
 
         {/* Playing */}
         {phase === "playing" && (
-          <div className="w-full max-w-3xl space-y-6">
+          <div className="w-full max-w-3xl space-y-4 sm:space-y-6">
             {/* Player progress bars */}
             <div className="space-y-2">
               {/* Self */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold w-20 truncate" style={{ color: "var(--accent-primary)" }}>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-xs font-bold w-14 sm:w-20 truncate" style={{ color: "var(--accent-primary)" }}>
                   You
                 </span>
                 <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-tertiary)" }}>
@@ -470,7 +470,7 @@ export default function TypeRushRoomPage() {
                     transition={{ duration: 0.2 }}
                   />
                 </div>
-                <span className="text-xs font-bold w-12 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs font-bold w-10 sm:w-12 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
                   {wpm}
                 </span>
               </div>
@@ -478,8 +478,8 @@ export default function TypeRushRoomPage() {
               {players.filter((p) => p.sessionId !== session?.sessionId).map((p) => {
                 const prog = playerProgress[p.sessionId];
                 return (
-                  <div key={p.sessionId} className="flex items-center gap-3">
-                    <span className="text-xs font-bold w-20 truncate" style={{ color: "var(--text-secondary)" }}>
+                  <div key={p.sessionId} className="flex items-center gap-2 sm:gap-3">
+                    <span className="text-xs font-bold w-14 sm:w-20 truncate" style={{ color: "var(--text-secondary)" }}>
                       {p.username}
                     </span>
                     <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-tertiary)" }}>
@@ -490,7 +490,7 @@ export default function TypeRushRoomPage() {
                         transition={{ duration: 0.2 }}
                       />
                     </div>
-                    <span className="text-xs font-bold w-12 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
+                    <span className="text-xs font-bold w-10 sm:w-12 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
                       {prog?.wpm || 0}
                     </span>
                   </div>
@@ -498,20 +498,30 @@ export default function TypeRushRoomPage() {
               })}
             </div>
 
-            {/* Text to type */}
-            <div className="p-5 rounded-2xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
+            {/* Text to type — tap anywhere on mobile to focus */}
+            <div
+              className="p-3 sm:p-5 rounded-2xl cursor-text"
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}
+              onClick={() => inputRef.current?.focus()}
+            >
               {renderText()}
             </div>
 
-            {/* Hidden input for typing */}
+            {/* Hidden input for typing — visible on mobile as small bar */}
             <input
               ref={inputRef}
               type="text"
               value={currentInput}
               onChange={handleInput}
               disabled={finished}
-              className="opacity-0 absolute -z-10"
+              className="sm:opacity-0 sm:absolute sm:-z-10 w-full h-11 px-4 rounded-xl text-sm font-medium outline-none sm:pointer-events-none"
+              style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
+              placeholder={finished ? "Finished!" : "Type here on mobile..."}
               autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
             />
 
             {/* Stats bar */}
@@ -571,7 +581,7 @@ export default function TypeRushRoomPage() {
               );
               return null;
             })()}
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {roundRankings.map((r) => (
                 <div key={r.sessionId}
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
@@ -657,7 +667,7 @@ export default function TypeRushRoomPage() {
               );
             })()}
             <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>🏁 Race Complete!</h2>
-            <div className="flex flex-col gap-2 w-80">
+            <div className="flex flex-col gap-2 w-full max-w-sm">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId}
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}

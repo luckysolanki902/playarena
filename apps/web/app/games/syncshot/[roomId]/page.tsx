@@ -249,33 +249,58 @@ export default function SyncShotRoom() {
   }, [phase, session?.sessionId]);
 
   // ── Input Handlers ────────────────────────────────────────────────────
-  const getCanvasCoords = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasCoordsFromClient = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     // Map CSS display coords → canvas internal coords
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getCanvasCoords(e);
-    if (!coords) return;
+  const emitMove = useCallback((coords: { x: number; y: number }, force = false) => {
     localCursorRef.current = coords;
     if (phaseRef.current !== "playing") return;
     const now = Date.now();
-    if (now - lastMoveRef.current < 33) return;
+    if (!force && now - lastMoveRef.current < 33) return;
     lastMoveRef.current = now;
     socketRef.current?.emit("syncshot:move", { roomId, position: coords });
-  }, [roomId, getCanvasCoords]);
+  }, [roomId]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getCanvasCoordsFromClient(e.clientX, e.clientY);
+    if (!coords) return;
+    emitMove(coords);
+  }, [emitMove, getCanvasCoordsFromClient]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== "playing") return;
-    const coords = getCanvasCoords(e);
+    const coords = getCanvasCoordsFromClient(e.clientX, e.clientY);
     if (!coords) return;
     socketRef.current?.emit("syncshot:shoot", { roomId, position: coords });
-  }, [roomId, getCanvasCoords]);
+  }, [roomId, getCanvasCoordsFromClient]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    const coords = getCanvasCoordsFromClient(touch.clientX, touch.clientY);
+    if (!coords) return;
+    emitMove(coords, true);
+    if (phaseRef.current === "playing") {
+      socketRef.current?.emit("syncshot:shoot", { roomId, position: coords });
+    }
+  }, [emitMove, getCanvasCoordsFromClient, roomId]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    const coords = getCanvasCoordsFromClient(touch.clientX, touch.clientY);
+    if (!coords) return;
+    emitMove(coords);
+  }, [emitMove, getCanvasCoordsFromClient]);
 
   const handleMouseLeave = useCallback(() => { localCursorRef.current = null; }, []);
 
@@ -447,13 +472,16 @@ export default function SyncShotRoom() {
               height={settings.arenaHeight}
               onMouseMove={handleMouseMove}
               onClick={handleClick}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseLeave}
               onMouseLeave={handleMouseLeave}
-              className="w-full h-full cursor-none block"
-              style={{ border: `2px solid ${GAME_COLOR}55`, borderRadius: "1rem" }}
+              className="w-full h-full block touch-none md:cursor-none"
+              style={{ border: `2px solid ${GAME_COLOR}55`, borderRadius: "1rem", touchAction: "none" }}
             />
 
             {/* Live scoreboard overlay */}
-            <div className="absolute top-2 right-2 rounded-xl p-2.5 min-w-[130px]"
+            <div className="absolute top-2 left-2 right-2 sm:left-auto sm:right-2 rounded-xl p-2.5 min-w-[130px]"
               style={{ background: "rgba(7,7,17,0.88)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(8px)" }}>
               {Object.values(players).sort((a, b) => b.oddsScore - a.oddsScore).map((p) => (
                 <div key={p.oddsId} className="flex justify-between items-center gap-3 py-0.5 text-xs">
@@ -479,6 +507,11 @@ export default function SyncShotRoom() {
                 reloading…
               </div>
             )}
+
+            <div className="absolute bottom-3 right-3 px-3 py-1 rounded-full text-[11px] font-bold md:hidden"
+              style={{ background: "rgba(7,7,17,0.88)", color: "var(--text-secondary)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              Tap to shoot
+            </div>
 
             {/* Hit effects overlay — positions already in CSS space */}
             <AnimatePresence>

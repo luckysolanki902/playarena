@@ -386,6 +386,24 @@ export default function MultiplayerWordlePage() {
           {/* Playing */}
           {phase === "playing" && (
             <>
+              {Object.keys(opponents).length > 0 && (
+                <div className="md:hidden w-full max-w-sm overflow-x-auto pb-1">
+                  <div className="flex gap-2 min-w-max">
+                    {Object.entries(opponents).map(([sid, opp]) => (
+                      <div key={sid}
+                        className="px-3 py-2 rounded-2xl"
+                        style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-bold" style={{ color: "var(--text-primary)" }}>{opp.username || "Player"}</span>
+                          <span className="font-bold" style={{ color: opp.solved ? "var(--accent-primary)" : "var(--text-muted)" }}>
+                            {opp.solved ? "Solved" : `${opp.guessCount}/${MAX_ATTEMPTS}`}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <WordleBoard guesses={guesses} currentGuess={currentGuess} maxAttempts={MAX_ATTEMPTS} wordLength={WORD_LENGTH} shake={shake} />
               {solved && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm font-bold"
@@ -426,7 +444,7 @@ export default function MultiplayerWordlePage() {
                 );
                 return null;
               })()}
-              <div className="flex flex-col gap-2 w-64">
+              <div className="flex flex-col gap-2 w-full max-w-xs">
                 {roundResult.rankings.map((r, i) => (
                   <motion.div key={r.sessionId} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.1 }}
@@ -505,7 +523,7 @@ export default function MultiplayerWordlePage() {
               <div className="text-center">
                 <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{totalRounds} rounds completed</p>
               </div>
-              <div className="flex flex-col gap-2 w-72">
+              <div className="flex flex-col gap-2 w-full max-w-xs">
                 {finalRankings.map((r, i) => (
                   <motion.div key={r.sessionId} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 + i * 0.15 }}
@@ -562,9 +580,9 @@ export default function MultiplayerWordlePage() {
           </aside>
         )}
 
-        {/* Chat panel */}
+        {/* Chat panel — sidebar on desktop, bottom sheet on mobile */}
         {chatOpen && (
-          <aside className="flex flex-col w-64 border-l" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
+          <aside className="hidden md:flex flex-col w-64 border-l" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {messages.length === 0 && (
                 <p className="text-xs text-center pt-8 font-medium" style={{ color: "var(--text-muted)" }}>No messages yet</p>
@@ -591,6 +609,51 @@ export default function MultiplayerWordlePage() {
           </aside>
         )}
       </div>
+
+      {/* Mobile chat bottom sheet */}
+      <AnimatePresence>
+        {chatOpen && (
+          <>
+            <motion.div className="md:hidden fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.5)" }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setChatOpen(false)} />
+            <motion.div
+              className="md:hidden fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-3xl"
+              style={{ background: "var(--bg-secondary)", maxHeight: "65dvh", border: "1px solid var(--border-subtle)" }}
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+            >
+              <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
+                <p className="text-sm font-extrabold" style={{ color: "var(--text-primary)" }}>Chat</p>
+                <button onClick={() => setChatOpen(false)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer"
+                  style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}>✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {messages.length === 0 && (
+                  <p className="text-xs text-center pt-4 font-medium" style={{ color: "var(--text-muted)" }}>No messages yet</p>
+                )}
+                {messages.map((msg, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-bold" style={{ color: "var(--accent-warm)" }}>{msg.username}: </span>
+                    <span style={{ color: "var(--text-secondary)" }}>{msg.text}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 p-3 border-t shrink-0" style={{ borderColor: "var(--border-default)" }}>
+                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendChat()}
+                  maxLength={200} placeholder="Say something..."
+                  className="flex-1 h-11 px-4 rounded-xl text-sm font-medium outline-none"
+                  style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)" }} autoFocus />
+                <button onClick={sendChat}
+                  className="btn-game h-11 px-4 rounded-xl text-sm font-bold cursor-pointer"
+                  style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>Send</button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <footer className="relative z-10 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
         Powered by <a href="https://spyll.in" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}><span style={{ fontFamily: "'Liquids', sans-serif", color: "rgb(255, 89, 115)", fontSize: "1rem" }}>Spyll</span></a>

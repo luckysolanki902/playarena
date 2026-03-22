@@ -27,7 +27,7 @@ export default function Keyboard({ letterStates, onKey, disabled }: KeyboardProp
   return (
     <div className="flex flex-col items-center gap-[6px] w-full max-w-[500px] mx-auto">
       {ROWS.map((row, rowIdx) => (
-        <div key={rowIdx} className="flex gap-[5px] justify-center w-full">
+        <div key={rowIdx} className="flex gap-[4px] min-[380px]:gap-[5px] justify-center w-full">
           {row.map((key) => {
             const isSpecial = key === "enter" || key === "\u232B";
             const style = isSpecial
@@ -41,11 +41,11 @@ export default function Keyboard({ letterStates, onKey, disabled }: KeyboardProp
                 onClick={() => !disabled && onKey(key)}
                 disabled={disabled}
                 className={`${
-                  isSpecial ? "px-3 sm:px-4 text-xs sm:text-sm" : "w-[30px] sm:w-[38px] text-sm sm:text-base"
-                } h-[48px] sm:h-[56px] rounded-xl font-bold uppercase select-none cursor-pointer flex items-center justify-center`}
+                  isSpecial ? "px-2.5 min-[380px]:px-3 sm:px-4 text-[11px] sm:text-sm" : "w-[27px] min-[380px]:w-[30px] sm:w-[36px] md:w-[38px] text-sm sm:text-base"
+                } h-[46px] min-[380px]:h-[48px] sm:h-[54px] md:h-[56px] rounded-xl font-bold uppercase select-none cursor-pointer flex items-center justify-center`}
                 style={{
                   ...(style as Record<string, string>),
-                  minWidth: isSpecial ? "52px" : undefined,
+                  minWidth: isSpecial ? "46px" : undefined,
                   opacity: disabled ? 0.3 : 1,
                   transition: "background-color 0.3s ease, opacity 0.2s ease",
                 }}

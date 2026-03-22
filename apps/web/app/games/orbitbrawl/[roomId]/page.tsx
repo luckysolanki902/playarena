@@ -303,28 +303,33 @@ export default function OrbitBrawlRoom() {
     };
   }, [phase, forceWaves, playerNames]);
 
-  // Mouse controls for charging
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!socket || phase !== 'playing') return;
+  const startCharge = useCallback((type: 'push' | 'pull') => {
+    if (!socket || phase !== 'playing') return;
+    setIsCharging(true);
+    setChargeType(type);
+    socket.emit('orbitbrawl:start-charge', { roomId, chargeType: type });
+  }, [socket, roomId, phase]);
 
-      const type = e.button === 0 ? 'push' : e.button === 2 ? 'pull' : null;
-      if (!type) return;
-
-      setIsCharging(true);
-      setChargeType(type);
-      socket.emit('orbitbrawl:start-charge', { roomId, chargeType: type });
-    },
-    [socket, roomId, phase]
-  );
-
-  const handleMouseUp = useCallback(() => {
+  const releaseCharge = useCallback(() => {
     if (!socket || !isCharging) return;
-
     setIsCharging(false);
     setChargeType(null);
     socket.emit('orbitbrawl:release-charge', { roomId });
   }, [socket, roomId, isCharging]);
+
+  // Mouse controls for charging
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const type = e.button === 0 ? 'push' : e.button === 2 ? 'pull' : null;
+      if (!type) return;
+      startCharge(type);
+    },
+    [startCharge]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    releaseCharge();
+  }, [releaseCharge]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -366,7 +371,7 @@ export default function OrbitBrawlRoom() {
           )}
         </div>
         {phase === 'playing' && (
-          <div className="flex gap-6 text-sm">
+          <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-6 text-xs sm:text-sm">
             <span className="text-gray-400">
               Round <span className="text-white font-bold">{roundNumber}</span>/5
             </span>
@@ -467,8 +472,8 @@ export default function OrbitBrawlRoom() {
 
         {/* Playing */}
         {phase === 'playing' && (
-          <div className="flex gap-6">
-            <div className="relative">
+          <div className="flex flex-col lg:flex-row items-center lg:items-start gap-4 lg:gap-6 w-full max-w-5xl">
+            <div className="relative w-full max-w-[700px]">
               <canvas
                 ref={canvasRef}
                 width={settings.arenaCenter.x * 2}
@@ -477,13 +482,13 @@ export default function OrbitBrawlRoom() {
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
                 onContextMenu={handleContextMenu}
-                className="rounded-lg cursor-crosshair"
+                className="rounded-lg cursor-crosshair w-full h-auto block"
                 style={{ border: `2px solid ${THEME_COLOR}` }}
               />
 
               {/* Controls hint */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 px-4 py-2 rounded-lg text-sm">
-                <span className="text-blue-400">Left-click</span> = Push · 
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 px-4 py-2 rounded-lg text-xs sm:text-sm text-center whitespace-nowrap">
+                <span className="text-blue-400">Left-click</span> = Push ·
                 <span className="text-purple-400 ml-2">Right-click</span> = Pull
               </div>
 
@@ -505,10 +510,35 @@ export default function OrbitBrawlRoom() {
                   </div>
                 </div>
               )}
+
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:hidden">
+                <button
+                  type="button"
+                  onPointerDown={(event) => { event.preventDefault(); startCharge('push'); }}
+                  onPointerUp={releaseCharge}
+                  onPointerLeave={releaseCharge}
+                  onPointerCancel={releaseCharge}
+                  className="rounded-2xl px-4 py-3 text-sm font-black"
+                  style={{ background: 'rgba(59,130,246,0.18)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.35)' }}
+                >
+                  Hold Push
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(event) => { event.preventDefault(); startCharge('pull'); }}
+                  onPointerUp={releaseCharge}
+                  onPointerLeave={releaseCharge}
+                  onPointerCancel={releaseCharge}
+                  className="rounded-2xl px-4 py-3 text-sm font-black"
+                  style={{ background: 'rgba(168,85,247,0.18)', color: '#d8b4fe', border: '1px solid rgba(168,85,247,0.35)' }}
+                >
+                  Hold Pull
+                </button>
+              </div>
             </div>
 
             {/* Scoreboard */}
-            <div className="bg-gray-900/80 rounded-lg p-4 min-w-[180px]">
+            <div className="bg-gray-900/80 rounded-lg p-4 w-full lg:w-[220px]">
               <h3 className="font-bold mb-4 text-center" style={{ color: THEME_COLOR }}>
                 Players
               </h3>

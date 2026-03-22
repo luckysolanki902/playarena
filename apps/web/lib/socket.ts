@@ -13,6 +13,14 @@ export function getSocket(): Socket {
       transports: ['websocket', 'polling'],
       autoConnect: false,
     });
+    // If the server rejects the token (expired or invalid), clear the local
+    // session so the user is sent back to the name-entry screen.
+    socket.on('connect_error', (err) => {
+      if (err.message === 'AUTH_FAILED' || err.message === 'AUTH_REQUIRED') {
+        useSessionStore.getState().clearSession();
+        socket = null;
+      }
+    });
   }
   return socket;
 }

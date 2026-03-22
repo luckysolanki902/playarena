@@ -70,6 +70,7 @@ export default function ScribbleRoom() {
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
   const [myPoints, setMyPoints] = useState(0);
   const [hasGuessedCorrectly, setHasGuessedCorrectly] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const showToast = useCallback((msg: string, ms = 2000) => {
     setToast(msg);
@@ -277,6 +278,7 @@ export default function ScribbleRoom() {
 
   // Auto-scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { if (phase !== "drawing") setMobileChatOpen(false); }, [phase]);
 
   const isHost = players.find((p) => p.sessionId === session?.sessionId)?.isHost ?? false;
   const startGame = () => { socketRef.current?.emit("lobby:start-game", { roomId }); sfx.click(); };
@@ -314,6 +316,11 @@ export default function ScribbleRoom() {
   const timerPct = timeLeft / timeLimit;
 
   if (!session) return null;
+
+  // Shared player list for scoreboard (game players or lobby players)
+  const scoreboardPlayers = gamePlayers.length > 0 ? gamePlayers : players.map((p) => ({
+    sessionId: p.sessionId, username: p.username, score: 0, roundScore: 0, hasGuessed: false, isDrawing: false,
+  }));
 
   return (
     <div className="min-h-screen flex flex-col relative stars-bg" style={{ maxHeight: "100dvh", overflow: "hidden" }}>
@@ -483,10 +490,10 @@ export default function ScribbleRoom() {
         {/* === DRAWING === */}
         {phase === "drawing" && (
           <>
-            {/* Left: Canvas */}
-            <div className="flex-1 flex flex-col p-3 overflow-hidden" style={{ minWidth: 0 }}>
+            {/* Left/Main: Canvas area (full on mobile, flex-1 on desktop) */}
+            <div className="flex-1 flex flex-col p-2 sm:p-3 overflow-hidden" style={{ minWidth: 0 }}>
               {/* Word display */}
-              <div className="flex items-center justify-between mb-2 px-1 shrink-0">
+              <div className="flex items-center justify-between mb-1.5 px-1 shrink-0">
                 <div className="text-center flex-1">
                   {isDrawer ? (
                     <div>
@@ -514,13 +521,29 @@ export default function ScribbleRoom() {
                 )}
               </div>
 
+              {/* Mobile player chips — compact row, hidden on desktop sidebar */}
+              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0">
+                {scoreboardPlayers.map((p) => (
+                  <div key={p.sessionId} className="flex items-center gap-1 px-2 py-0.5 rounded-lg shrink-0 text-[10px] font-bold"
+                    style={{ background: p.isDrawing ? "rgba(255,209,102,0.15)" : p.hasGuessed ? "rgba(78,205,196,0.1)" : "var(--bg-card)",
+                      border: "1px solid var(--border-subtle)", color: p.isDrawing ? "var(--accent-warm)" : p.hasGuessed ? "var(--accent-primary)" : "var(--text-secondary)" }}>
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
+                      style={{ background: avatarColor(p.username), color: "#fff" }}>{p.username[0].toUpperCase()}</div>
+                    {p.username}
+                    {p.isDrawing && <span>🖌️</span>}
+                    {p.hasGuessed && !p.isDrawing && <span>✓</span>}
+                    <span className="ml-0.5" style={{ color: "var(--accent-warm)" }}>{p.score}</span>
+                  </div>
+                ))}
+              </div>
+
               {/* Canvas */}
               <div className="flex-1 min-h-0">
                 <ScribbleCanvas isDrawer={isDrawer} remotePoints={remotePoints} strokes={strokes}
                   onDraw={sendDraw} onClear={sendClear} onUndo={sendUndo} onRedo={sendRedo} active={canvasActive} />
               </div>
 
-              {/* Guess input */}
+              {/* Guess input (non-drawer only) */}
               {!isDrawer && (
                 <div className="flex gap-2 mt-2 shrink-0">
                   <input value={guessInput} onChange={(e) => setGuessInput(e.target.value)}
@@ -539,15 +562,13 @@ export default function ScribbleRoom() {
               )}
             </div>
 
-            {/* Right: Scoreboard + Chat */}
-            <aside className="w-52 flex flex-col border-l shrink-0 overflow-hidden" style={{ borderColor: "var(--border-subtle)" }}>
+            {/* Desktop sidebar: Scoreboard + Chat (hidden on mobile) */}
+            <aside className="hidden md:flex w-52 flex-col border-l shrink-0 overflow-hidden" style={{ borderColor: "var(--border-subtle)" }}>
               {/* Players */}
               <div className="p-3 border-b shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
                 <p className="text-[10px] font-black uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Players</p>
                 <div className="flex flex-col gap-1">
-                  {(gamePlayers.length > 0 ? gamePlayers : players.map((p) => ({
-                    sessionId: p.sessionId, username: p.username, score: 0, roundScore: 0, hasGuessed: false, isDrawing: false,
-                  }))).map((p) => (
+                  {scoreboardPlayers.map((p) => (
                     <div key={p.sessionId} className="flex items-center gap-1.5 py-1 px-1.5 rounded-lg"
                       style={{ background: p.isDrawing ? "rgba(255,209,102,0.08)" : p.hasGuessed ? "rgba(78,205,196,0.06)" : "transparent" }}>
                       <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
@@ -566,7 +587,6 @@ export default function ScribbleRoom() {
                   ))}
                 </div>
               </div>
-
               {/* Chat */}
               <div className="flex-1 overflow-y-auto p-2 space-y-1" style={{ fontSize: 11 }}>
                 {messages.length === 0 && (
@@ -584,6 +604,96 @@ export default function ScribbleRoom() {
                 <div ref={chatEndRef} />
               </div>
             </aside>
+
+            {/* Mobile: floating chat toggle button */}
+            <button
+              className="md:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg cursor-pointer"
+              style={{ background: "var(--accent-warm)", color: "var(--bg-primary)", boxShadow: "0 4px 20px rgba(255,209,102,0.4)" }}
+              onClick={() => setMobileChatOpen(true)}
+              aria-label="Open chat">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              {messages.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center"
+                  style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>
+                  {messages.length > 9 ? "9+" : messages.length}
+                </span>
+              )}
+            </button>
+
+            {/* Mobile chat bottom sheet */}
+            <AnimatePresence>
+              {mobileChatOpen && (
+                <>
+                  {/* Backdrop */}
+                  <motion.div className="md:hidden fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.5)" }}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    onClick={() => setMobileChatOpen(false)} />
+                  {/* Sheet */}
+                  <motion.div
+                    className="md:hidden fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-3xl"
+                    style={{ background: "var(--bg-secondary)", maxHeight: "70dvh", border: "1px solid var(--border-subtle)" }}
+                    initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                  >
+                    {/* Handle + header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b shrink-0" style={{ borderColor: "var(--border-subtle)" }}>
+                      <div className="w-10 h-1 rounded-full mx-auto" style={{ background: "var(--border-default)", position: "absolute", left: "50%", transform: "translateX(-50%)", top: 10 }} />
+                      <p className="text-sm font-extrabold" style={{ color: "var(--text-primary)" }}>Players &amp; Chat</p>
+                      <button onClick={() => setMobileChatOpen(false)}
+                        className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer"
+                        style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}>✕</button>
+                    </div>
+                    {/* Scores strip */}
+                    <div className="flex items-center gap-3 px-4 py-2 overflow-x-auto shrink-0 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                      {scoreboardPlayers.map((p) => (
+                        <div key={p.sessionId} className="flex flex-col items-center gap-0.5 shrink-0">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold relative"
+                            style={{ background: avatarColor(p.username), color: "#fff" }}>
+                            {p.username[0].toUpperCase()}
+                            {p.isDrawing && <span className="absolute -bottom-0.5 -right-0.5 text-[10px]">🖌️</span>}
+                            {p.hasGuessed && !p.isDrawing && <span className="absolute -bottom-0.5 -right-0.5 text-[9px]">✓</span>}
+                          </div>
+                          <span className="text-[9px] font-bold truncate max-w-[3rem]" style={{ color: "var(--text-secondary)" }}>{p.username}</span>
+                          <span className="text-[10px] font-black tabular-nums" style={{ color: "var(--accent-warm)" }}>{p.score}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Chat messages */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                      {messages.length === 0 && (
+                        <p className="text-center pt-4 text-xs" style={{ color: "var(--text-muted)" }}>Start guessing!</p>
+                      )}
+                      {messages.map((msg, i) => (
+                        <div key={i} className="text-sm flex flex-wrap gap-x-1.5">
+                          <span className="font-bold shrink-0" style={{ color: avatarColor(msg.username) }}>{msg.username}:</span>
+                          <span style={{ color: msg.type === "correct" ? "var(--accent-primary)" : msg.type === "close" ? "var(--accent-warm)" : "var(--text-secondary)" }}>
+                            {msg.text}
+                          </span>
+                        </div>
+                      ))}
+                      <div ref={chatEndRef} />
+                    </div>
+                    {/* Guess input in bottom sheet (non-drawer) */}
+                    {!isDrawer && (
+                      <div className="flex gap-2 p-3 border-t shrink-0" style={{ borderColor: "var(--border-default)" }}>
+                        <input value={guessInput} onChange={(e) => setGuessInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && sendGuess()}
+                          placeholder={hasGuessedCorrectly ? "You guessed it! 🎉" : "Guess the word..."}
+                          disabled={hasGuessedCorrectly}
+                          className="flex-1 h-10 px-3 rounded-xl text-sm font-semibold outline-none"
+                          style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
+                          maxLength={50} autoFocus />
+                        <button onClick={() => { sendGuess(); setMobileChatOpen(false); }} disabled={hasGuessedCorrectly}
+                          className="btn-game h-10 px-4 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-40"
+                          style={{ background: "var(--accent-primary)", color: "var(--bg-primary)" }}>Send</button>
+                      </div>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </>
         )}
 
@@ -613,7 +723,7 @@ export default function ScribbleRoom() {
               );
               return null;
             })()}
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {roundRankings.map((r, i) => (
                 <motion.div key={r.sessionId} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
                   className="flex items-center justify-between px-4 py-2.5 rounded-xl"
@@ -696,7 +806,7 @@ export default function ScribbleRoom() {
               <h2 className="text-xl font-black mb-1" style={{ color: "var(--text-primary)" }}>Game Over!</h2>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>{totalRounds} rounds · {players.length} players</p>
             </div>
-            <div className="flex flex-col gap-2 w-72">
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               {finalRankings.map((r, i) => (
                 <motion.div key={r.sessionId} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.12 }}
                   className="flex items-center justify-between px-4 py-3 rounded-2xl"
