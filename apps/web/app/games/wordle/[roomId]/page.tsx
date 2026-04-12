@@ -12,7 +12,7 @@ import { connectSocket, disconnectSocket } from "@/lib/socket";
 import { sfx } from "@/lib/sounds";
 import type { LetterFeedback } from "@playarena/shared";
 
-const WORD_LENGTH = 5;
+const WORD_LENGTH_DEFAULT = 5;
 const MAX_ATTEMPTS = 6;
 
 type Phase = "lobby" | "countdown" | "playing" | "round-end" | "game-end";
@@ -44,6 +44,7 @@ export default function MultiplayerWordlePage() {
   const [round, setRound] = useState(1);
   const [totalRounds, setTotalRounds] = useState(3);
   const [timeLeft, setTimeLeft] = useState(120);
+  const [wordLength, setWordLength] = useState(WORD_LENGTH_DEFAULT);
 
   const [guesses, setGuesses] = useState<Guess[]>([]);
   const [pendingWord, setPendingWord] = useState<string | null>(null);
@@ -124,11 +125,12 @@ export default function MultiplayerWordlePage() {
       }, 1000);
     });
 
-    socket.on("wordle:round-start", ({ round: r, totalRounds: tr, timeLimit }) => {
+    socket.on("wordle:round-start", ({ round: r, totalRounds: tr, timeLimit, wordLength: wl }) => {
       setPhase("playing");
       setRound(r);
       setTotalRounds(tr);
       setTimeLeft(timeLimit);
+      if (wl) setWordLength(wl);
       setGuesses([]);
       setPendingWord(null);
       setCurrentGuess("");
@@ -199,7 +201,7 @@ export default function MultiplayerWordlePage() {
   const startGame = () => { socketRef.current?.emit("lobby:start-game", { roomId }); sfx.click(); };
 
   const submitGuess = useCallback(() => {
-    if (currentGuess.length !== WORD_LENGTH || solved || pendingWord) return;
+    if (currentGuess.length !== wordLength || solved || pendingWord) return;
     if (guesses.length >= MAX_ATTEMPTS) return;
     if (!isValidWord(currentGuess)) {
       setShake(true); showToast("Not in word list"); sfx.fail();
@@ -210,16 +212,16 @@ export default function MultiplayerWordlePage() {
     setPendingWord(currentGuess);
     setGuesses((prev) => [...prev, { word: currentGuess, feedback: [] }]);
     setCurrentGuess("");
-  }, [currentGuess, guesses, roomId, solved, pendingWord, showToast]);
+  }, [currentGuess, guesses, roomId, solved, pendingWord, showToast, wordLength]);
 
   const handleKey = useCallback(
     (key: string) => {
       if (phase !== "playing" || solved || pendingWord) return;
       if (key === "enter") { submitGuess(); }
       else if (key === "\u232B" || key === "backspace") { setCurrentGuess((prev) => prev.slice(0, -1)); sfx.click(); }
-      else if (/^[a-z]$/i.test(key) && currentGuess.length < WORD_LENGTH) { setCurrentGuess((prev) => prev + key.toLowerCase()); sfx.pop(); }
+      else if (/^[a-z]$/i.test(key) && currentGuess.length < wordLength) { setCurrentGuess((prev) => prev + key.toLowerCase()); sfx.pop(); }
     },
-    [phase, solved, pendingWord, currentGuess, submitGuess],
+    [phase, solved, pendingWord, currentGuess, submitGuess, wordLength],
   );
 
   useEffect(() => {
@@ -236,7 +238,6 @@ export default function MultiplayerWordlePage() {
   }, [handleKey]);
 
   const letterStates = getKeyboardState(guesses.filter((g) => g.feedback.length > 0));
-  const requestHint = () => { socketRef.current?.emit("wordle:request-hint", { roomId }); sfx.click(); };
   const sendChat = () => {
     const trimmed = chatInput.trim();
     if (!trimmed || !socketRef.current) return;
@@ -404,7 +405,7 @@ export default function MultiplayerWordlePage() {
                   </div>
                 </div>
               )}
-              <WordleBoard guesses={guesses} currentGuess={currentGuess} maxAttempts={MAX_ATTEMPTS} wordLength={WORD_LENGTH} shake={shake} />
+              <WordleBoard guesses={guesses} currentGuess={currentGuess} maxAttempts={MAX_ATTEMPTS} wordLength={wordLength} shake={shake} />
               {solved && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm font-bold"
                   style={{ color: "var(--accent-primary)" }}>
@@ -412,11 +413,6 @@ export default function MultiplayerWordlePage() {
                 </motion.p>
               )}
               <Keyboard letterStates={letterStates} onKey={handleKey} disabled={solved || !!pendingWord} />
-              <button onClick={requestHint} disabled={solved} onMouseEnter={() => sfx.hover()}
-                className="btn-game text-xs px-4 py-2 rounded-xl font-bold cursor-pointer disabled:opacity-30"
-                style={{ background: "var(--bg-card)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }}>
-                Get hint
-              </button>
             </>
           )}
 
