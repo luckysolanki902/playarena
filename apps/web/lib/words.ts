@@ -44,7 +44,7 @@ const WORDS = [
   'paint','panel','panic','paper','party','paste','patch','pause','peace','peach',
   'pearl','penny','phase','phone','photo','piano','piece','pilot','pinch','pitch',
   'pixel','pizza','place','plain','plane','plant','plate','plaza','plead','plumb',
-  'plume','plump','plunge','point','polar','pound','power','press','price','pride',
+  'plume','plump','point','polar','pound','power','press','price','pride',
   'prime','print','prior','prize','probe','proof','proud','prove','proxy','psalm',
   'pulse','punch','pupil','purse','queen','query','quest','queue','quick','quiet',
   'quite','quota','quote','radar','radio','raise','rally','ranch','range','rapid',
